@@ -22,7 +22,7 @@ public class LangRu {
         Path localeFile = plugin.getDataFolder().toPath().resolve("lang/ru_ru.json");
         if (Files.notExists(localeFile)) plugin.saveResource("lang/ru_ru.json", false);
         try (InputStreamReader reader = new InputStreamReader(Files.newInputStream(localeFile), StandardCharsets.UTF_8)) {
-            JsonElement root = JsonParser.parseReader(reader);
+            JsonElement root = new JsonParser().parse(reader);
             if (!root.isJsonObject()) {
                 plugin.getLogger().warning("[LangRu] lang/ru_ru.json is not a JsonObject");
                 return;

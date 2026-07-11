@@ -19,9 +19,9 @@ class MarketFilterTest {
                 listing("new", 2, 2, 200)
         ));
         MarketFilter.sortListings(listings, MarketFilter.SortType.NEW_FIRST);
-        assertEquals("new", listings.getFirst().id());
+        assertEquals("new", listings.get(0).id());
         MarketFilter.sortListings(listings, MarketFilter.SortType.PRICE_TOTAL_DESC);
-        assertEquals("old", listings.getFirst().id());
+        assertEquals("old", listings.get(0).id());
     }
 
     private MarketListing listing(String id, double unitPrice, int amount, long createdAt) {

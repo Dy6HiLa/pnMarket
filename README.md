@@ -1,14 +1,14 @@
 # pnMarket
 
 <p align="center">
-  Аукцион для Minecraft-серверов на Paper 1.21.8+.
+  Аукцион для Minecraft-серверов на Paper 1.16.5–1.21.x.
   <br>
   GUI рынка, частичная покупка, поиск, собственные категории и SQLite по умолчанию.
 </p>
 
 <p align="center">
   <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest">
-    <img src="https://img.shields.io/badge/Скачать-v1.0.0-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.0">
+    <img src="https://img.shields.io/badge/Скачать-v1.1.0-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.1.0">
   </a>
   <a href="https://github.com/Dy6HiLa/pnMarket/releases">
     <img src="https://img.shields.io/badge/Releases-GitHub-5A8DEE?style=for-the-badge&labelColor=17241F" alt="GitHub Releases">
@@ -19,8 +19,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Paper-1.21.8%2B-5A8DEE?style=for-the-badge" alt="Paper 1.21.8+">
-  <img src="https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge" alt="Java 21">
+  <img src="https://img.shields.io/badge/Paper-1.16.5--1.21.x-5A8DEE?style=for-the-badge" alt="Paper 1.16.5–1.21.x">
+  <img src="https://img.shields.io/badge/Java-17%2B-ED8B00?style=for-the-badge" alt="Java 17+">
   <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB-429F91?style=for-the-badge" alt="SQLite, MySQL и MongoDB">
 </p>
 
@@ -63,13 +63,13 @@
 <a id="installation"></a>
 ## Установка
 
-1. Скачайте [`pnMarket-1.0.0.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
+1. Скачайте [`pnMarket-1.1.0.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
 2. Поместите файл в папку сервера `plugins/`.
 3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики.
 4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
 5. При необходимости измените `plugins/pnMarket/config.yml` и выполните полный перезапуск сервера.
 
-**Требования:** Paper 1.21.8 или новее, Java 21, Vault и плагин экономики. Для MySQL и MongoDB нужен доступный внешний сервер БД.
+**Требования:** Paper 1.16.5–1.21.x, Java 17 или новее, Vault и плагин экономики. Для MySQL и MongoDB нужен доступный внешний сервер БД.
 
 Не используйте PlugMan и аналоги для первой установки или смены типа БД. Выполняйте полный рестарт сервера.
 
@@ -199,7 +199,7 @@ plugins/pnMarket/
 ./gradlew.bat clean test releaseJar
 ```
 
-Готовый файл появится по пути `release/pnMarket-1.0.0.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
+Готовый файл появится по пути `release/pnMarket-1.1.0.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
 
 <a id="support"></a>
 ## Поддержка

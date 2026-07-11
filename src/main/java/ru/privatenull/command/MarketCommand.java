@@ -98,7 +98,7 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         plugin.openAuctionSearch(player, query);
-        player.playSound(player.getLocation(), Sound.BLOCK_AMETHYST_BLOCK_CHIME, 0.8f, 1.4f);
+        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, 0.8f, 1.4f);
         return true;
     }
 
