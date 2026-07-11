@@ -1,0 +1,125 @@
+prefix: "&x&6&8&F&B&3&C[Аукцион] &7»"
+
+command:
+  only-player: "{prefix} &fКоманда доступна только игроку."
+  no-permission: "{prefix} &fНедостаточно прав."
+  reloaded: "{prefix} &aКонфигурация и локализация обновлены."
+  sell-usage: "{prefix} &fИспользование: /ah sell <цена>"
+  search-usage: "{prefix} &fИспользование: /ah search <название>"
+  seller-usage: "{prefix} &fИспользование: /ah show <ник>"
+
+error:
+  invalid-price: "{prefix} &fНекорректная цена."
+  price-positive: "{prefix} &fЦена должна быть больше 0."
+  price-too-low: "{prefix} &fМинимальная цена лота: &e{price}"
+  price-too-high: "{prefix} &fМаксимальная цена лота: &e{price}"
+  listing-limit: "{prefix} &fВы уже выставили максимальное количество лотов: &e{limit}"
+  item-required: "{prefix} &fВозьмите предмет в основную руку."
+  invalid-amount: "{prefix} &fНекорректное количество предметов."
+  serialization: "{prefix} &fНе удалось сохранить предмет."
+  player-not-found: "{prefix} &fИгрок не найден."
+  listing-unavailable: "{prefix} &fЭтот лот уже недоступен."
+  own-listing: "{prefix} &fНельзя купить собственный лот."
+  insufficient-funds: "{prefix} &fНедостаточно средств."
+  purchase-failed: "{prefix} &cПокупка не выполнена. Средства возвращены."
+  seller-empty: "{prefix} &fУ игрока &e@{seller} &fнет активных лотов."
+
+success:
+  listing-returned: "{prefix} &fЛот перенесён в раздел &e«Мои товары»&f."
+
+time:
+  empty: "0 ч 0 мин"
+  remaining: "{hours} ч {minutes} мин"
+
+listing:
+  info-title: "&x&9&E&F&C&6&5 «Информация о лоте»"
+  seller: " &7- &fПродавец: &e@{seller}"
+  price: " &7- &fСтоимость: &x&5&E&D&2&7&D{price}⛁"
+  amount: " &7- &fКоличество: &x&E&E&7&2&4&1{amount}✎"
+  expires: " &7- &fИстечёт через: &x&E&E&4&1&5&6{time}"
+  status-title: "&x&F&C&6&5&D&F «Статус лота»"
+  status-amount: " &7- &fКоличество: &e{amount}"
+  status-value: " &7- &fСтатус: &e{status}"
+  status-expired: "Истёк"
+  status-returned: "Возвращён"
+
+notification:
+  listed-prefix: "&a[Аукцион] &7» &fВы выставили на продажу "
+  collected-prefix: "&a[Аукцион] &7» &fВы забрали "
+  purchased-prefix: "&a[Аукцион] &7» &fВы купили "
+  seller-sale-prefix: "&a[Аукцион] &7» &fИгрок &e@{buyer}"
+  seller-sale-middle: " купил у вас "
+  price-separator: " за "
+
+update:
+  available: "{prefix} &eДоступна версия &f{version}&e. Нажмите, чтобы скачать."
+
+gui:
+  title:
+    auction: "Аукцион"
+    auction-page: "{name} • Страница {page}"
+    auction-pages: "{name} • Страница {page}/{pages}"
+    my-items: "Мои товары"
+    purchase: "Покупка предмета"
+    seller: "Товары {seller}"
+  action:
+    back: "&x&F&F&0&0&0&0Вернуться"
+    buy: "&x&7&C&F&F&8&0Купить"
+    previous-page: "&x&F&C&D&8&6&5Предыдущая страница"
+    next-page: "&x&F&C&D&8&6&5Следующая страница"
+    loading: "&8Загрузка..."
+    my-items: "&x&F&C&C&9&4&0Мои товары"
+    collect: "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ &fчтобы забрать"
+    purchase: "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ &fчтобы купить"
+    open: "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ &fчтобы открыть"
+    next: "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ &fчтобы сменить"
+    previous: "&x&F&F&8&7&0&2➥ &fНажмите, &eПКМ &fчтобы вернуть обратно"
+    no-money: "&x&F&F&0&0&0&0У вас нет денег"
+  search:
+    title: "&x&9&E&F&C&6&5 «Поиск»"
+    line-1: " &7- &fОтображаются только лоты"
+    line-2: "    &fпо вашему запросу."
+  my-items:
+    title: "&x&9&E&F&C&6&5 «Раздел лотов»"
+    line-1: " &7- &fЗдесь находятся ваши лоты,"
+    line-2: "    &fкоторые истекли или были"
+    line-3: "    &fвозвращены с аукциона."
+  filter:
+    category-title: "&x&E&E&8&0&4&1Категории"
+    current-category: " &7- &fТекущая категория: &x&B&4&E&E&4&1{category}"
+    categories-title: "&x&D&5&B&F&F&F «Список категорий»"
+    sort-title: "&x&7&4&E&E&4&1Сортировка"
+    current-sort: " &7- &fТекущая сортировка: &x&B&4&E&E&4&1{sort}"
+    sorts-title: "&x&D&5&B&F&F&F «Список сортировки»"
+    available-sorts: "&7Доступные режимы:"
+  seller:
+    label: "&x&F&C&D&8&6&5Продавец: &e{seller}"
+    item-title: "&x&9&E&F&C&6&5 «Информация»"
+    item-line-1: " &7- &fПросмотреть другие лоты"
+    item-line-2: "    &fэтого продавца."
+    item-action: "&7ЛКМ: &fоткрыть товары продавца"
+    info-name: "&fИнформация"
+    info-title: "&x&9&E&F&C&6&5 «Информация о продавце»"
+    info-player: " &7- &fНик: &e@{seller}"
+    info-active: " &7- &fАктивных товаров: &e{amount}"
+    warning-title: "&x&F&F&0&0&0&0 «Важно»"
+    warning-line-1: " &7- &fНиже показаны все предметы,"
+    warning-line-2: "    &fкоторые этот игрок продаёт"
+    warning-line-3: "    &fна аукционе."
+  category:
+    all: "Все подряд"
+    weapon: "Оружие"
+    armor: "Снаряжение"
+    food: "Еда"
+    consumable: "Расходники"
+    potion: "Зелья"
+    ore: "Руды"
+    sphere: "Сферы"
+    donate: "Донат-предметы"
+  sort:
+    new_first: "Сначала новые"
+    old_first: "Сначала старые"
+    price_total_desc: "Сначала дороже"
+    price_total_asc: "Сначала дешевле"
+    price_unit_desc: "Сначала дороже за единицу"
+    price_unit_asc: "Сначала дешевле за единицу"

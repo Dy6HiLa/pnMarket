@@ -1,0 +1,55 @@
+storage:
+  # sqlite, mysql или mongodb. SQLite работает без отдельного сервера.
+  type: sqlite
+  sqlite:
+    # Файл создаётся в plugins/pnMarket/.
+    file: "market.db"
+  mysql:
+    # Можно указать полный JDBC URL вместо host/port/database.
+    url: ""
+    host: "localhost"
+    port: 3306
+    database: "minecraft"
+    username: "root"
+    password: ""
+  mongo:
+    # Для production задайте PNMARKET_MONGO_URI в окружении сервера.
+    uri: "mongodb://localhost:27017"
+    database: "minecraft"
+    collection: "auction"
+limits:
+  # Максимум одновременно активных лотов игрока. default действует для всех,
+  # а ключ с названием группы Vault переопределяет лимит для этой группы.
+  default: 3
+  gifest: 10
+
+listing-price:
+  # Цена за весь лот, не за одну единицу предмета. maximum: 0 отключает верхнюю границу.
+  minimum: 1
+  maximum: 1000000
+
+# Категории отображаются в указанном порядке. Можно добавлять свои секции.
+# Правила категории: materials - точные Material ID, material-contains - часть Material ID,
+# name-contains - часть пользовательского названия, edible - все съедобные предметы.
+categories:
+  weapon:
+    name: "Оружие"
+    material-contains: ["_SWORD", "_AXE", "BOW", "CROSSBOW", "TRIDENT"]
+  armor:
+    name: "Снаряжение"
+    material-contains: ["_HELMET", "_CHESTPLATE", "_LEGGINGS", "_BOOTS", "ELYTRA", "SHIELD"]
+  food:
+    name: "Еда"
+    edible: true
+  potion:
+    name: "Зелья"
+    materials: ["POTION", "SPLASH_POTION", "LINGERING_POTION", "TIPPED_ARROW"]
+  ore:
+    name: "Руды"
+    material-contains: ["ORE", "INGOT", "NUGGET", "GEM"]
+  sphere:
+    name: "Сферы"
+    name-contains: ["сфера"]
+  donate:
+    name: "Донат-предметы"
+    name-contains: ["донат", "donate"]

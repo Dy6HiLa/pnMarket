@@ -1,0 +1,16 @@
+name: pnMarket
+version: '${version}'
+main: ru.privatenull.PnMarketPlugin
+api-version: '1.21'
+authors: [ privatenull ]
+description: pnMarket - AuctionPlugin
+website: https://github.com/Dy6HiLa/pnMarket
+depend: [Vault]
+commands:
+  ah:
+    description: Открыть аукцион pnMarket
+    usage: /ah [sell <цена>|search <название>|show <игрок>|reload]
+permissions:
+  pnmarket.admin:
+    description: Получать уведомления об обновлениях pnMarket
+    default: op
