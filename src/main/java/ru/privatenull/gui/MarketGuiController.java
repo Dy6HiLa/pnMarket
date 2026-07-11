@@ -17,6 +17,7 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 import ru.privatenull.PnMarketPlugin;
+import ru.privatenull.compat.MaterialCompat;
 import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.market.MarketFilter;
 import ru.privatenull.market.MarketFilter.SortType;
@@ -73,6 +74,11 @@ public final class MarketGuiController {
     private static final int SLOT_PLUS_1 = 32;
     private static final int SLOT_PLUS_10 = 33;
     private static final int SLOT_BACK_BOTTOM = 49;
+
+    // Prefer the 1.17+/1.19+ icons while retaining valid 1.16.5 fallbacks.
+    private static final Material ICON_BACK = MaterialCompat.first("RED_CANDLE", "RED_WOOL");
+    private static final Material ICON_BUY = MaterialCompat.first("LIME_CANDLE", "LIME_WOOL");
+    private static final Material ICON_INFO = MaterialCompat.first("MANGROVE_HANGING_SIGN", "OAK_SIGN");
 
     private static final int[] SELLER_SLOTS = {
             20, 21, 22, 23, 24,
@@ -287,7 +293,7 @@ public final class MarketGuiController {
 
         if (isSearch) {
             ItemStack back = createIcon(
-                    Material.RED_WOOL,
+                    ICON_BACK,
                     messages.message("gui.action.back"),
                     "",
                     messages.message("gui.search.title"),
@@ -388,7 +394,7 @@ public final class MarketGuiController {
                     lore.add(messages.message("gui.action.purchase"));
                 }
                 meta.setLore(lore);
-                meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                applyDisplayFlags(meta);
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
@@ -415,7 +421,7 @@ public final class MarketGuiController {
             return;
         }
         Inventory inv = view.inventory;
-        ItemStack item = new ItemStack(Material.OAK_SIGN);
+        ItemStack item = new ItemStack(ICON_INFO);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(messages.message("gui.filter.category-title"));
@@ -436,7 +442,7 @@ public final class MarketGuiController {
             lore.add(messages.message("gui.action.previous"));
             lore.add("");
             meta.setLore(lore);
-            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(meta);
             item.setItemMeta(meta);
         }
         hideAttributes(item);
@@ -475,7 +481,7 @@ public final class MarketGuiController {
             lore.add(messages.message("gui.action.next"));
             lore.add(messages.message("gui.action.previous"));
             meta.setLore(lore);
-            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(meta);
             item.setItemMeta(meta);
         }
         hideAttributes(item);
@@ -524,7 +530,7 @@ public final class MarketGuiController {
             lore.add(messages.message("gui.action.next"));
             lore.add(messages.message("gui.action.previous"));
             meta.setLore(lore);
-            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(meta);
             item.setItemMeta(meta);
         }
         hideAttributes(item);
@@ -552,7 +558,7 @@ public final class MarketGuiController {
                 List<String> lore = new ArrayList<>(buildListingLore(listing, listing.amount()));
                 lore.add(messages.message("gui.action.purchase"));
                 meta.setLore(lore);
-                meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                applyDisplayFlags(meta);
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
@@ -665,7 +671,7 @@ public final class MarketGuiController {
                 lore.add("");
                 lore.add(messages.message("gui.action.collect"));
                 meta.setLore(lore);
-                meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+                applyDisplayFlags(meta);
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
@@ -673,7 +679,7 @@ public final class MarketGuiController {
             view.slotToListingId.put(slot, listing.id());
         }
         view.inventory.setItem(SLOT_BACK_BOTTOM,
-                createIcon(Material.RED_WOOL, messages.message("gui.action.back")));
+                createIcon(ICON_BACK, messages.message("gui.action.back")));
     }
 
     void handleMyItemsClick(Player player, MyItemsView view, int slot) {
@@ -719,7 +725,7 @@ public final class MarketGuiController {
         purchaseViews.put(player.getUniqueId(), view);
         decoratePurchase(view.inventory);
         view.inventory.setItem(SLOT_BACK_TOP,
-                createIcon(Material.RED_WOOL, messages.message("gui.action.back")));
+                createIcon(ICON_BACK, messages.message("gui.action.back")));
         view.inventory.setItem(SLOT_MINUS_1, createIcon(Material.RED_WOOL, "§c-1"));
         view.inventory.setItem(SLOT_MINUS_10, createIcon(Material.RED_WOOL, "§c-10"));
         view.inventory.setItem(SLOT_PLUS_1, createIcon(Material.GREEN_WOOL, "§a+1"));
@@ -728,7 +734,7 @@ public final class MarketGuiController {
         PurchaseView pv = view;
 
         ItemStack buy = createIcon(
-                Material.LIME_WOOL, messages.message("gui.action.buy")
+                ICON_BUY, messages.message("gui.action.buy")
         );
         inv.setItem(SLOT_BUY, buy);
 
@@ -747,11 +753,7 @@ public final class MarketGuiController {
             hl.add("");
             hl.add(messages.message("gui.seller.item-action"));
             sm.setLore(hl);
-            sm.addItemFlags(
-                    ItemFlag.HIDE_ATTRIBUTES,
-                    ItemFlag.HIDE_ENCHANTS,
-                    ItemFlag.HIDE_UNBREAKABLE
-            );
+            applyDisplayFlags(sm);
             head.setItemMeta(sm);
         }
         hideAttributes(head);
@@ -797,7 +799,7 @@ public final class MarketGuiController {
             List<String> lore = new ArrayList<>();
             lore.addAll(buildListingLore(listing, pv.quantity));
             pm.setLore(lore);
-            pm.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(pm);
             preview.setItemMeta(pm);
         }
         hideAttributes(preview);
@@ -977,7 +979,7 @@ public final class MarketGuiController {
         sellerViews.put(viewer.getUniqueId(), sv);
         decoratePurchase(inv);
         int activeCount = sync().activeCount(sellerId);
-        ItemStack info = new ItemStack(Material.OAK_SIGN);
+        ItemStack info = new ItemStack(ICON_INFO);
         ItemMeta im = info.getItemMeta();
         if (im != null) {
             im.setDisplayName(messages.message("gui.seller.info-name"));
@@ -993,13 +995,13 @@ public final class MarketGuiController {
             lore.add(messages.message("gui.seller.warning-line-3"));
             lore.add("");
             im.setLore(lore);
-            im.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(im);
             info.setItemMeta(im);
         }
         hideAttributes(info);
         inv.setItem(13, info);
         ItemStack back = createIcon(
-                Material.RED_WOOL, messages.message("gui.action.back")
+                ICON_BACK, messages.message("gui.action.back")
         );
         inv.setItem(45, back);
         fillSellerInventory(sv);
@@ -1056,7 +1058,7 @@ public final class MarketGuiController {
         ItemMeta meta = barrier.getItemMeta();
         if (meta != null) {
             meta.setDisplayName(messages.message("gui.action.no-money"));
-            meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES);
+            applyDisplayFlags(meta);
             barrier.setItemMeta(meta);
         }
         hideAttributes(barrier);
@@ -1175,14 +1177,14 @@ public final class MarketGuiController {
         if (item == null) return null;
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.addItemFlags(
-                    ItemFlag.HIDE_ATTRIBUTES,
-                    ItemFlag.HIDE_ENCHANTS,
-                    ItemFlag.HIDE_UNBREAKABLE
-            );
+            applyDisplayFlags(meta);
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private void applyDisplayFlags(ItemMeta meta) {
+        meta.addItemFlags(ItemFlag.HIDE_ATTRIBUTES, ItemFlag.HIDE_ENCHANTS, ItemFlag.HIDE_UNBREAKABLE);
     }
 
     private MarketListing loadListingById(String id) {
