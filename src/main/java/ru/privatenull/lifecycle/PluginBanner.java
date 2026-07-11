@@ -36,8 +36,10 @@ public final class PluginBanner {
         plugin.getLogger().info(" ");
         for (String line : LOGO) plugin.getLogger().info(line);
         plugin.getLogger().info(" ");
-        plugin.getLogger().info("pnMarket v" + plugin.getDescription().getVersion() + " | " + state);
-        if (supportUrl != null && !supportUrl.isBlank()) plugin.getLogger().info("Support: " + supportUrl);
+        plugin.getLogger().info("PRIVATENULL | pnMarket v" + plugin.getDescription().getVersion() + " | " + state);
+        if (supportUrl != null && !supportUrl.isBlank()) {
+            plugin.getLogger().info("Discord Support: " + supportUrl);
+        }
         plugin.getLogger().info(" ");
     }
 }
