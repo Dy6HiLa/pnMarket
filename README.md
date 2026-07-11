@@ -1,9 +1,11 @@
 # pnMarket
 
 <p align="center">
-  Аукцион для Minecraft-серверов на Paper 1.16.5–1.21.x.
+  Аукцион для Minecraft-серверов на Paper 1.17–1.21.x.
   <br>
   GUI рынка, частичная покупка, поиск, собственные категории и SQLite по умолчанию.
+  <br>
+  Paper 1.16.5 поддерживается в экспериментальном режиме.
 </p>
 
 <p align="center">
@@ -19,7 +21,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Paper-1.16.5--1.21.x-5A8DEE?style=for-the-badge" alt="Paper 1.16.5–1.21.x">
+  <img src="https://img.shields.io/badge/Paper-1.17--1.21.x-5A8DEE?style=for-the-badge" alt="Paper 1.17–1.21.x">
+  <img src="https://img.shields.io/badge/1.16.5-Experimental-D8A657?style=for-the-badge" alt="1.16.5 experimental">
   <img src="https://img.shields.io/badge/Java-17%2B-ED8B00?style=for-the-badge" alt="Java 17+">
   <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB-429F91?style=for-the-badge" alt="SQLite, MySQL и MongoDB">
 </p>
@@ -69,7 +72,9 @@
 4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
 5. При необходимости измените `plugins/pnMarket/config.yml` и выполните полный перезапуск сервера.
 
-**Требования:** Paper 1.16.5–1.21.x, Java 17 или новее, Vault и плагин экономики. Для MySQL и MongoDB нужен доступный внешний сервер БД.
+**Требования:** Paper 1.17–1.21.x, Java 17 или новее, Vault и плагин экономики. Для MySQL и MongoDB нужен доступный внешний сервер БД.
+
+> Paper 1.16.5 доступен как экспериментальный режим. Базовый аукцион и GUI запускаются на этой версии, но совместимость ещё тестируется. Если встретили ошибку на 1.16.5, напишите в [Discord-поддержку](https://discord.gg/rRbzq6cnc6), приложив версию Paper, Java и полный текст ошибки из консоли.
 
 Не используйте PlugMan и аналоги для первой установки или смены типа БД. Выполняйте полный рестарт сервера.
 
