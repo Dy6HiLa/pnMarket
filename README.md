@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest">
-    <img src="https://img.shields.io/badge/Скачать-v1.1.1-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.1.1">
+    <img src="https://img.shields.io/badge/Скачать-v1.0.0-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.0">
   </a>
   <a href="https://github.com/Dy6HiLa/pnMarket/releases">
     <img src="https://img.shields.io/badge/Releases-GitHub-5A8DEE?style=for-the-badge&labelColor=17241F" alt="GitHub Releases">
@@ -66,7 +66,7 @@
 <a id="installation"></a>
 ## Установка
 
-1. Скачайте [`pnMarket-1.1.1.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
+1. Скачайте [`pnMarket-1.0.0.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
 2. Поместите файл в папку сервера `plugins/`.
 3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики.
 4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
@@ -204,7 +204,7 @@ plugins/pnMarket/
 ./gradlew.bat clean test releaseJar
 ```
 
-Готовый файл появится по пути `release/pnMarket-1.1.1.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
+Готовый файл появится по пути `release/pnMarket-1.0.0.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
 
 <a id="support"></a>
 ## Поддержка
