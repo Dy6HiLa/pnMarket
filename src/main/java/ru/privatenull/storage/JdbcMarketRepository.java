@@ -28,9 +28,15 @@ public final class JdbcMarketRepository implements MarketStorage {
     private final Connection connection;
     private final long expiryMillis;
     private final Logger logger;
+    private final String tableName;
 
     public JdbcMarketRepository(String driver, String url, String username, String password,
                                 long expiryMillis, Logger logger) {
+        this(driver, url, username, password, expiryMillis, logger, "pnmarket_listings");
+    }
+
+    public JdbcMarketRepository(String driver, String url, String username, String password,
+                                long expiryMillis, Logger logger, String tableName) {
         try {
             Class.forName(driver);
             connection = (username == null || username.isBlank())
@@ -38,6 +44,10 @@ public final class JdbcMarketRepository implements MarketStorage {
                     : DriverManager.getConnection(url, username, password == null ? "" : password);
             this.expiryMillis = expiryMillis;
             this.logger = logger;
+            if (tableName == null || !tableName.matches("[A-Za-z0-9_]+")) {
+                throw new IllegalArgumentException("invalid table name");
+            }
+            this.tableName = tableName;
             createTable();
         } catch (ClassNotFoundException | SQLException exception) {
             throw new IllegalStateException("Не удалось открыть SQL-хранилище: " + exception.getMessage(), exception);
@@ -48,7 +58,7 @@ public final class JdbcMarketRepository implements MarketStorage {
     public synchronized MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit,
                                               int amount, long createdAt) throws IOException {
         String id = UUID.randomUUID().toString();
-        String sql = "INSERT INTO pnmarket_listings (id, seller, item, price_per_unit, amount, created_at, status) "
+        String sql = "INSERT INTO " + tableName + " (id, seller, item, price_per_unit, amount, created_at, status) "
                 + "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, id);
@@ -66,18 +76,18 @@ public final class JdbcMarketRepository implements MarketStorage {
 
     @Override
     public synchronized List<MarketListing> findAll() {
-        return find("SELECT * FROM pnmarket_listings", null);
+        return find("SELECT * FROM " + tableName, null);
     }
 
     @Override
     public synchronized List<MarketListing> findBySeller(UUID sellerId) {
-        return find("SELECT * FROM pnmarket_listings WHERE seller = ?", sellerId.toString());
+        return find("SELECT * FROM " + tableName + " WHERE seller = ?", sellerId.toString());
     }
 
     @Override
     public synchronized Optional<MarketListing> findById(String id) {
         if (id == null || id.isBlank()) return Optional.empty();
-        List<MarketListing> listings = find("SELECT * FROM pnmarket_listings WHERE id = ?", id);
+        List<MarketListing> listings = find("SELECT * FROM " + tableName + " WHERE id = ?", id);
         return listings.stream().findFirst();
     }
 
@@ -88,7 +98,7 @@ public final class JdbcMarketRepository implements MarketStorage {
 
     @Override
     public synchronized int countActiveListings(UUID sellerId) {
-        String sql = "SELECT COUNT(*) FROM pnmarket_listings WHERE seller = ? AND status = 'ACTIVE' AND amount > 0";
+        String sql = "SELECT COUNT(*) FROM " + tableName + " WHERE seller = ? AND status = 'ACTIVE' AND amount > 0";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, sellerId.toString());
             try (ResultSet result = statement.executeQuery()) {
@@ -101,17 +111,17 @@ public final class JdbcMarketRepository implements MarketStorage {
 
     @Override
     public synchronized void delete(String id) {
-        executeUpdate("DELETE FROM pnmarket_listings WHERE id = ?", id);
+        executeUpdate("DELETE FROM " + tableName + " WHERE id = ?", id);
     }
 
     @Override
     public synchronized void updateAmount(String id, int amount) {
-        executeUpdate("UPDATE pnmarket_listings SET amount = ? WHERE id = ?", amount, id);
+        executeUpdate("UPDATE " + tableName + " SET amount = ? WHERE id = ?", amount, id);
     }
 
     @Override
     public synchronized void updateStatus(String id, String status) {
-        executeUpdate("UPDATE pnmarket_listings SET status = ? WHERE id = ?", status, id);
+        executeUpdate("UPDATE " + tableName + " SET status = ? WHERE id = ?", status, id);
     }
 
     @Override
@@ -130,7 +140,7 @@ public final class JdbcMarketRepository implements MarketStorage {
     @Override
     public synchronized void rollbackReservation(String id, int quantity) {
         if (id == null || quantity <= 0) return;
-        String sql = "UPDATE pnmarket_listings SET amount = amount + ? WHERE id = ?";
+        String sql = "UPDATE " + tableName + " SET amount = amount + ? WHERE id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, quantity);
             statement.setString(2, id);
@@ -155,7 +165,7 @@ public final class JdbcMarketRepository implements MarketStorage {
     }
 
     private void createTable() throws SQLException {
-        String sql = "CREATE TABLE IF NOT EXISTS pnmarket_listings ("
+        String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                 + "id VARCHAR(36) PRIMARY KEY, seller VARCHAR(36) NOT NULL, item TEXT NOT NULL, "
                 + "price_per_unit DOUBLE NOT NULL, amount INTEGER NOT NULL, created_at BIGINT NOT NULL, "
                 + "status VARCHAR(16) NOT NULL)";

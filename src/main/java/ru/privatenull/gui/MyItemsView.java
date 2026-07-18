@@ -7,6 +7,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 
 final class MyItemsView implements InventoryHolder {
+    MarketGuiController controller;
     Inventory inventory;
     Map<Integer, String> slotToListingId;
 

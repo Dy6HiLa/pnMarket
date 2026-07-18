@@ -28,10 +28,26 @@ listing-price:
   minimum: 1
   maximum: 1000000
 
+donate-listing-price:
+  # Цена выставления на /dah sell в PlayerPoints. Она делится на количество предметов в лоте.
+  minimum: 1
+  maximum: 1000000
+
+# Шаблоны цены. {price} заменяется на сумму; поддерживаются стандартные цвета &.
+prefix-vault: "&a{price}⛃"
+prefix-playerpoints: "&d{price} PP"
+
+# /ah kit и /dah kit забирают занятые слоты основного инвентаря в один лот.
+kits:
+  max-slots: 18
+
 # Категории отображаются в указанном порядке. Можно добавлять свои секции.
 # Правила категории: materials - точные Material ID, material-contains - часть Material ID,
 # name-contains - часть пользовательского названия, edible - все съедобные предметы.
 categories:
+  bundles:
+    name: "Наборы"
+    name-contains: ["Набор"]
   weapon:
     name: "Оружие"
     material-contains: ["_SWORD", "_AXE", "BOW", "CROSSBOW", "TRIDENT"]

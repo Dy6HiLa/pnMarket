@@ -1,9 +1,10 @@
 package ru.privatenull.gui;
 
+import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
-import net.milkbowl.vault.economy.Economy;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
@@ -18,9 +19,11 @@ import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.scheduler.BukkitRunnable;
 import ru.privatenull.PnMarketPlugin;
 import ru.privatenull.compat.MaterialCompat;
+import ru.privatenull.currency.MarketPayment;
 import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.market.MarketFilter;
 import ru.privatenull.market.MarketFilter.SortType;
+import ru.privatenull.market.MarketBundle;
 import ru.privatenull.market.MarketCategories;
 import ru.privatenull.market.MarketSearch;
 import ru.privatenull.market.MarketSync;
@@ -29,8 +32,13 @@ import ru.privatenull.config.MessagesConfig;
 import ru.privatenull.model.MarketListing;
 import ru.privatenull.model.PurchaseReservation;
 import ru.privatenull.storage.MarketStorage;
+import ru.privatenull.pnlibrary.gui.GuiOpenAnimationService;
+import ru.privatenull.pnlibrary.gui.GuiUpdateService;
 
-import java.text.DecimalFormat;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class MarketGuiController {
@@ -59,7 +67,8 @@ public final class MarketGuiController {
             1, 7, 9, 17, 36, 44, 46, 52
     };
 
-    private static final int SLOT_MY_ITEMS = 45;
+    private static final int SLOT_DONATE_AUCTION = 45;
+    private static final int SLOT_MY_ITEMS = 46;
     private static final int SLOT_PREV_PAGE = 47;
     private static final int SLOT_NEXT_PAGE = 51;
     private static final int SLOT_SORT = 52;
@@ -75,8 +84,13 @@ public final class MarketGuiController {
     private static final int SLOT_PLUS_10 = 33;
     private static final int SLOT_BACK_BOTTOM = 49;
 
+    private static final int SLOT_BUNDLE_BACK = 49;
+
+    private static final String BUNDLE_PREVIOUS_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNjllYTFkODYyNDdmNGFmMzUxZWQxODY2YmNhNmEzMDQwYTA2YzY4MTc3Yzc4ZTQyMzE2YTEwOThlNjBmYjdkMyJ9fX0=";
+    private static final String BUNDLE_NEXT_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvODI3MWE0NzEwNDQ5NWUzNTdjM2U4ZTgwZjUxMWE5ZjEwMmIwNzAwY2E5Yjg4ZTg4Yjc5NWQzM2ZmMjAxMDVlYiJ9fX0=";
+    private static final String BUNDLE_DISABLED_TEXTURE = "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvMjc1NDgzNjJhMjRjMGZhODQ1M2U0ZDkzZTY4YzU5NjlkZGJkZTU3YmY2NjY2YzAzMTljMWVkMWU4NGQ4OTA2NSJ9fX0=";
+
     // Prefer the 1.17+/1.19+ icons while retaining valid 1.16.5 fallbacks.
-    private static final Material ICON_BACK = MaterialCompat.first("RED_CANDLE", "RED_WOOL");
     private static final Material ICON_BUY = MaterialCompat.first("LIME_CANDLE", "LIME_WOOL");
     private static final Material ICON_INFO = MaterialCompat.first("MANGROVE_HANGING_SIGN", "OAK_SIGN");
 
@@ -87,29 +101,75 @@ public final class MarketGuiController {
 
     private final PnMarketPlugin plugin;
     private final MarketStorage repository;
-    private final Economy economy;
+    private final MarketPayment payment;
     private final MessagesConfig messages;
     private final GuiLabels guiLabels;
     private final MarketCategories categories;
+    private final MarketSync sync;
+    private final boolean donateAuction;
+    private final GuiOpenAnimationService guiAnimations;
+    private final GuiUpdateService guiUpdates = new GuiUpdateService();
+    private final Map<String, ItemStack> texturedHeadCache = new HashMap<>();
 
     final Map<UUID, AuctionView> auctionViews = new HashMap<>();
     final Map<UUID, PurchaseView> purchaseViews = new HashMap<>();
     final Map<UUID, SellerView> sellerViews = new HashMap<>();
     final Map<UUID, MyItemsView> myItemsViews = new HashMap<>();
-    private final DecimalFormat moneyFormat = new DecimalFormat("#,##0");
 
-    public MarketGuiController(PnMarketPlugin plugin, MarketStorage repository, Economy economy,
-                               MessagesConfig messages, GuiLabels guiLabels, MarketCategories categories) {
+    public MarketGuiController(PnMarketPlugin plugin, MarketStorage repository, MarketPayment payment,
+                               MessagesConfig messages, GuiLabels guiLabels, MarketCategories categories,
+                               MarketSync sync, boolean donateAuction) {
         this.plugin = plugin;
         this.repository = repository;
-        this.economy = economy;
+        this.payment = payment;
         this.messages = messages;
         this.guiLabels = guiLabels;
         this.categories = categories;
+        this.sync = sync;
+        this.donateAuction = donateAuction;
+        this.guiAnimations = new GuiOpenAnimationService(plugin);
+    }
+
+    public void shutdown() {
+        guiAnimations.shutdown();
+    }
+
+    private void openGui(Player player, Inventory inventory) {
+        Object currentHolder = player.getOpenInventory().getTopInventory().getHolder();
+        if (currentHolder == inventory.getHolder()) {
+            guiAnimations.cancel(player);
+            player.openInventory(inventory);
+            return;
+        }
+        guiAnimations.open(player, inventory, true);
+    }
+
+    private void setSlot(Inventory inventory, int slot, ItemStack item) {
+        if (sameSlotItem(inventory.getItem(slot), item)) return;
+        List<Player> viewers = inventory.getViewers().stream()
+                .filter(entity -> entity instanceof Player)
+                .map(entity -> (Player) entity)
+                .filter(viewer -> viewer.getOpenInventory().getTopInventory() == inventory)
+                .toList();
+        if (viewers.isEmpty()) {
+            inventory.setItem(slot, item == null ? null : item.clone());
+            return;
+        }
+        for (Player viewer : viewers) {
+            guiAnimations.complete(viewer);
+            guiUpdates.setTopSlot(viewer, inventory, slot, item);
+        }
+    }
+
+    private boolean sameSlotItem(ItemStack current, ItemStack replacement) {
+        boolean currentEmpty = current == null || current.getType().isAir();
+        boolean replacementEmpty = replacement == null || replacement.getType().isAir();
+        if (currentEmpty || replacementEmpty) return currentEmpty == replacementEmpty;
+        return current.equals(replacement);
     }
 
     private MarketSync sync() {
-        return plugin.marketSync();
+        return sync;
     }
 
     public List<MarketListing> activeListings() {
@@ -124,7 +184,11 @@ public final class MarketGuiController {
     }
 
     private String formatMoney(double d) {
-        return moneyFormat.format(d);
+        return payment.format(d);
+    }
+
+    private String formatPrice(double amount) {
+        return plugin.formatPrice(donateAuction, amount, formatMoney(amount));
     }
 
     private String color(String s) {
@@ -148,13 +212,96 @@ public final class MarketGuiController {
         ItemStack i = new ItemStack(material);
         ItemMeta meta = i.getItemMeta();
         if (meta != null) {
-            meta.setDisplayName(name);
+            meta.setDisplayName(ChatColor.RESET + name);
             if (loreLines != null && loreLines.length > 0) {
                 meta.setLore(Arrays.asList(loreLines));
             }
             i.setItemMeta(meta);
         }
         return hideAttributes(i);
+    }
+
+    private ItemStack texturedHead(String textureBase64, String name, String... loreLines) {
+        String cacheKey = textureBase64 + '\u0000' + name + '\u0000' + String.join("\u0000", loreLines);
+        ItemStack cached = texturedHeadCache.get(cacheKey);
+        if (cached != null) return cached.clone();
+
+        ItemStack head = new ItemStack(Material.PLAYER_HEAD);
+        SkullMeta meta = (SkullMeta) head.getItemMeta();
+        if (meta == null) return head;
+        meta.setDisplayName(ChatColor.RESET + name);
+        meta.setLore(Arrays.asList(loreLines));
+        try {
+            if (!applyModernSkullProfile(meta, textureBase64)) {
+                applyLegacySkullProfile(meta, textureBase64);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // The menu remains usable with a normal player head if a server changes its skull internals.
+        }
+        head.setItemMeta(meta);
+        head = hideAttributes(head);
+        texturedHeadCache.put(cacheKey, head.clone());
+        return head;
+    }
+
+    /** Uses Paper's public profile API on 1.19+, without linking pnMarket to a newer Bukkit API. */
+    private boolean applyModernSkullProfile(SkullMeta meta, String textureBase64) {
+        try {
+            URL skinUrl = textureUrl(textureBase64);
+            if (skinUrl == null) return false;
+
+            Class<?> profileType = Class.forName("org.bukkit.profile.PlayerProfile");
+            Class<?> texturesType = Class.forName("org.bukkit.profile.PlayerTextures");
+            UUID profileId = textureProfileId(textureBase64);
+            // Paper's two-argument factory is the stable form used by current Paper servers.
+            Object profile = Bukkit.class.getMethod("createPlayerProfile", UUID.class, String.class)
+                    .invoke(null, profileId, "pn" + profileId.toString().replace("-", "").substring(0, 14));
+            Object textures = profileType.getMethod("getTextures").invoke(profile);
+            texturesType.getMethod("setSkin", URL.class).invoke(textures, skinUrl);
+            profileType.getMethod("setTextures", texturesType).invoke(profile, textures);
+            SkullMeta.class.getMethod("setOwnerProfile", profileType).invoke(meta, profile);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    /** Uses the exact supplied Base64 payload on legacy servers such as 1.16.5. */
+    private void applyLegacySkullProfile(SkullMeta meta, String textureBase64) throws ReflectiveOperationException {
+        GameProfile profile = new GameProfile(textureProfileId(textureBase64), "pnMarket");
+        profile.getProperties().put("textures", new Property("textures", textureBase64));
+        Field profileField = findProfileField(meta.getClass());
+        profileField.setAccessible(true);
+        profileField.set(meta, profile);
+    }
+
+    private URL textureUrl(String textureBase64) {
+        try {
+            String json = new String(Base64.getDecoder().decode(textureBase64), StandardCharsets.UTF_8);
+            int start = json.indexOf("https://textures.minecraft.net/texture/");
+            if (start < 0) start = json.indexOf("http://textures.minecraft.net/texture/");
+            if (start < 0) return null;
+            int end = json.indexOf('"', start);
+            return new URL(json.substring(start, end < 0 ? json.length() : end));
+        } catch (IllegalArgumentException | java.net.MalformedURLException ignored) {
+            return null;
+        }
+    }
+
+    private UUID textureProfileId(String textureBase64) {
+        return UUID.nameUUIDFromBytes(("pnMarket:" + textureBase64).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private Field findProfileField(Class<?> type) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField("profile");
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException("profile");
     }
 
     private List<String> buildListingLore(MarketListing listing, int amountForLore) {
@@ -166,13 +313,84 @@ public final class MarketGuiController {
         lore.add("");
         lore.add(messages.message("listing.info-title"));
         lore.add(messages.message("listing.seller", Map.of("seller", ownerName)));
-        lore.add(messages.message("listing.price", Map.of("price", formatMoney(totalPrice))));
+        lore.add(" §7- §fСтоимость: " + formatPrice(totalPrice));
         if (amountForLore > 1) {
             lore.add(messages.message("listing.amount", Map.of("amount", amountForLore)));
         }
         lore.add(messages.message("listing.expires", Map.of("time", time)));
         lore.add("");
         return lore;
+    }
+
+    private void addBundleActionLore(List<String> lore, boolean ownListing) {
+        lore.add("§x§F§F§8§7§0§2➥ §fНажмите, §eЛКМ §fчтобы посмотреть содержимое");
+        if (ownListing) {
+            lore.add("§x§F§F§0§0§0§0➥ §fНажмите, §cПКМ §fчтобы снять с продажи");
+        } else {
+            lore.add("§x§7§C§F§F§8§0➥ §fНажмите, §aПКМ §fчтобы купить");
+        }
+    }
+
+    private boolean isBundle(MarketListing listing) {
+        return MarketBundle.isBundle(plugin, listing.item());
+    }
+
+    private String bundleDisplayName(MarketListing listing) {
+        int numericId = Math.floorMod(listing.id().hashCode(), 1_000_000);
+        return "§6Набор §8#" + String.format(Locale.ROOT, "%06d", numericId);
+    }
+
+    private List<ItemStack> bundleItems(MarketListing listing) {
+        return MarketBundle.contents(plugin, listing.item());
+    }
+
+    private List<ItemStack> deliveryItems(MarketListing listing, int amount) {
+        if (isBundle(listing)) return bundleItems(listing);
+        ItemStack item = listing.item().clone();
+        item.setAmount(amount);
+        return List.of(item);
+    }
+
+    private boolean canFitAll(Player player, List<ItemStack> items) {
+        ItemStack[] simulated = player.getInventory().getStorageContents();
+        for (int index = 0; index < simulated.length; index++) {
+            if (simulated[index] != null) simulated[index] = simulated[index].clone();
+        }
+
+        for (ItemStack source : items) {
+            if (source == null || source.getType().isAir()) continue;
+            int remaining = source.getAmount();
+            for (ItemStack stored : simulated) {
+                if (stored == null || !stored.isSimilar(source)) continue;
+                int space = stored.getMaxStackSize() - stored.getAmount();
+                if (space <= 0) continue;
+                int added = Math.min(space, remaining);
+                stored.setAmount(stored.getAmount() + added);
+                remaining -= added;
+                if (remaining == 0) break;
+            }
+            if (remaining > 0) {
+                for (int index = 0; index < simulated.length && remaining > 0; index++) {
+                    if (simulated[index] != null && !simulated[index].getType().isAir()) continue;
+                    ItemStack placed = source.clone();
+                    int added = Math.min(placed.getMaxStackSize(), remaining);
+                    placed.setAmount(added);
+                    simulated[index] = placed;
+                    remaining -= added;
+                }
+            }
+            if (remaining > 0) return false;
+        }
+        return true;
+    }
+
+    private void giveItemsOrDrop(Player player, List<ItemStack> items) {
+        ItemStack[] delivery = items.stream()
+                .filter(item -> item != null && !item.getType().isAir())
+                .map(ItemStack::clone)
+                .toArray(ItemStack[]::new);
+        Map<Integer, ItemStack> overflow = player.getInventory().addItem(delivery);
+        overflow.values().forEach(item -> player.getWorld().dropItemNaturally(player.getLocation(), item));
     }
 
     public void openAuction(Player player) {
@@ -186,6 +404,7 @@ public final class MarketGuiController {
     private void openAuction(Player player, String category, SortType sort, String searchQuery, int page, boolean isSearch) {
         UUID uuid = player.getUniqueId();
         AuctionView view = new AuctionView();
+        view.controller = this;
         view.viewer = uuid;
         view.category = category;
         view.sort = sort;
@@ -194,10 +413,16 @@ public final class MarketGuiController {
         view.isSearch = isSearch;
         view.slotToListingId = new HashMap<>();
 
+        List<MarketListing> filtered = getFilteredListings(view);
+        int pageSize = AUCTION_SLOTS.length;
+        int totalPages = Math.max(1, (filtered.size() + pageSize - 1) / pageSize);
+        if (view.page < 0) view.page = 0;
+        if (view.page >= totalPages) view.page = totalPages - 1;
+
         String baseTitle = (searchQuery != null && !searchQuery.isEmpty())
-                ? searchQuery : messages.message("gui.title.auction");
-        String title = messages.message("gui.title.auction-page", Map.of(
-                "name", baseTitle, "page", page + 1
+                ? searchQuery : auctionTitle();
+        String title = messages.message("gui.title.auction-pages", Map.of(
+                "name", baseTitle, "page", view.page + 1, "pages", totalPages
         ));
 
         Inventory inv = Bukkit.createInventory(view, 54, title);
@@ -207,43 +432,8 @@ public final class MarketGuiController {
         decorateAuction(inv, isSearch);
         initFilterIcons(view);
 
-        List<MarketListing> filtered = getFilteredListings(view);
-        int pageSize = AUCTION_SLOTS.length;
-        int totalPages = Math.max(1, (filtered.size() + pageSize - 1) / pageSize);
-        if (view.page < 0) view.page = 0;
-        if (view.page >= totalPages) view.page = totalPages - 1;
-
-        int startIndex = view.page * pageSize;
-        int endIndex = Math.min(startIndex + pageSize, filtered.size());
-
-        ItemStack blackFlag = new ItemStack(Material.BLACK_BANNER);
-        ItemMeta meta = blackFlag.getItemMeta();
-        if (meta != null) {
-            meta.setDisplayName(messages.message("gui.action.loading"));
-            blackFlag.setItemMeta(meta);
-        }
-        hideAttributes(blackFlag);
-
-        int index = startIndex;
-        for (int slot : AUCTION_SLOTS) {
-            if (index >= endIndex) {
-                inv.setItem(slot, null);
-            } else {
-                inv.setItem(slot, blackFlag);
-                index++;
-            }
-        }
-
-        player.openInventory(inv);
-
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!player.isOnline()) return;
-                if (!player.getOpenInventory().getTopInventory().equals(inv)) return;
-                fillAuctionInventory(player, view);
-            }
-        }.runTaskLater(plugin, 3L);
+        fillAuctionInventory(player, view, false);
+        openGui(player, inv);
     }
 
     private List<MarketListing> getFilteredListings(AuctionView view) {
@@ -267,6 +457,10 @@ public final class MarketGuiController {
         return filtered;
     }
 
+    private String auctionTitle() {
+        return donateAuction ? "Донат-аукцион" : messages.message("gui.title.auction");
+    }
+
     private void decorateAuction(Inventory inv, boolean isSearch) {
         ItemStack black = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
         ItemMeta bm = black.getItemMeta();
@@ -285,15 +479,15 @@ public final class MarketGuiController {
         hideAttributes(orange);
 
         for (int slot : AUCTION_BLACK_SLOTS) {
-            inv.setItem(slot, black);
+            setSlot(inv, slot, black);
         }
         for (int slot : AUCTION_ORANGE_SLOTS) {
-            inv.setItem(slot, orange);
+            setSlot(inv, slot, orange);
         }
 
         if (isSearch) {
-            ItemStack back = createIcon(
-                    ICON_BACK,
+            ItemStack back = texturedHead(
+                    BUNDLE_PREVIOUS_TEXTURE,
                     messages.message("gui.action.back"),
                     "",
                     messages.message("gui.search.title"),
@@ -301,27 +495,47 @@ public final class MarketGuiController {
                     messages.message("gui.search.line-2"),
                     ""
             );
-            inv.setItem(SLOT_MY_ITEMS, back);
+            setSlot(inv, SLOT_DONATE_AUCTION, back);
         } else {
-            ItemStack myItems = createIcon(
-                    Material.BARREL,
-                    messages.message("gui.action.my-items"),
+            Material icon = donateAuction ? Material.GOLD_INGOT : Material.NETHER_STAR;
+            setSlot(inv, SLOT_DONATE_AUCTION, createIcon(
+                    icon, "§x§D§5§B§F§F§F Смена аукциона",
                     "",
-                    messages.message("gui.my-items.title"),
-                    messages.message("gui.my-items.line-1"),
-                    messages.message("gui.my-items.line-2"),
-                    messages.message("gui.my-items.line-3"),
+                    " §7- §fТекущий аукцион: "
+                            + (donateAuction ? "§x§E§A§7§3§3§AДонат-аукцион" : "§x§3§A§E§A§4§DОбычный аукцион"),
+                    "",
+                    "§x§D§5§B§F§F§F «Доступные аукционы»",
+                    (donateAuction ? " §7- §f" : " §x§B§4§E§E§4§1» ")
+                            + "§x§3§A§E§A§4§DОбычный аукцион ",
+                    (donateAuction ? " §x§B§4§E§E§4§1» " : " §7- §f")
+                            + "§x§E§A§7§3§3§AДонат-аукцион ",
                     "",
                     messages.message("gui.action.open")
-            );
-            inv.setItem(SLOT_MY_ITEMS, myItems);
+            ));
         }
+        ItemStack myItems = createIcon(
+                Material.BARREL,
+                donateAuction ? "§x§D§5§B§F§F§F Мои донат-товары" : messages.message("gui.action.my-items"),
+                "",
+                " §7- §fЗдесь находятся ваши лоты,",
+                "    §fкоторые истекли или были",
+                "    §fвозвращены с аукциона.",
+                "",
+                "§x§D§5§B§F§F§F «Текущий раздел»",
+                (donateAuction ? " §7- §f" : " §x§B§4§E§E§4§1» ")
+                        + "§x§3§A§E§A§4§DМои товары",
+                (donateAuction ? " §x§B§4§E§E§4§1» " : " §7- §f")
+                        + "§x§E§A§7§3§3§AМои донат-товары",
+                "",
+                messages.message("gui.action.open")
+        );
+        setSlot(inv, SLOT_MY_ITEMS, myItems);
     }
 
     private void initFilterIcons(AuctionView view) {
         if (view.isSearch) {
             updateSortIcon(view);
-            view.inventory.setItem(SLOT_CATEGORY, null);
+            setSlot(view.inventory, SLOT_CATEGORY, null);
             return;
         }
 
@@ -330,6 +544,10 @@ public final class MarketGuiController {
     }
 
     void fillAuctionInventory(Player player, AuctionView view) {
+        fillAuctionInventory(player, view, true);
+    }
+
+    private void fillAuctionInventory(Player player, AuctionView view, boolean updateTitle) {
         Inventory inv = view.inventory;
         view.slotToListingId.clear();
 
@@ -351,21 +569,25 @@ public final class MarketGuiController {
             black.setItemMeta(bm);
         }
         hideAttributes(black);
-        inv.setItem(SLOT_PREV_PAGE, black);
-        inv.setItem(SLOT_NEXT_PAGE, black);
+        setSlot(inv, SLOT_PREV_PAGE, texturedHead(BUNDLE_DISABLED_TEXTURE, "§8Предыдущей страницы нет",
+                "", "§7Вы уже на первой странице.", ""));
+        setSlot(inv, SLOT_NEXT_PAGE, texturedHead(BUNDLE_DISABLED_TEXTURE, "§8Следующей страницы нет",
+                "", "§7Это последняя страница.", ""));
 
         if (view.page > 0) {
-            ItemStack prev = createIcon(
-                    Material.ARROW, messages.message("gui.action.previous-page")
+            ItemStack prev = texturedHead(
+                    BUNDLE_PREVIOUS_TEXTURE, "§e§l← Предыдущая страница",
+                    "§8━━━━━━━━━━━━━━━━", "§7Перейти на страницу §f" + view.page, "", "§e▸ Нажмите, чтобы открыть"
             );
-            inv.setItem(SLOT_PREV_PAGE, prev);
+            setSlot(inv, SLOT_PREV_PAGE, prev);
         }
 
         if (view.page < totalPages - 1) {
-            ItemStack next = createIcon(
-                    Material.ARROW, messages.message("gui.action.next-page")
+            ItemStack next = texturedHead(
+                    BUNDLE_NEXT_TEXTURE, "§e§lСледующая страница →",
+                    "§8━━━━━━━━━━━━━━━━", "§7Перейти на страницу §f" + (view.page + 2), "", "§e▸ Нажмите, чтобы открыть"
             );
-            inv.setItem(SLOT_NEXT_PAGE, next);
+            setSlot(inv, SLOT_NEXT_PAGE, next);
         }
 
         if (!view.isSearch) {
@@ -376,7 +598,7 @@ public final class MarketGuiController {
         int index = startIndex;
         for (int slot : AUCTION_SLOTS) {
             if (index >= endIndex) {
-                inv.setItem(slot, null);
+                setSlot(inv, slot, null);
                 continue;
             }
             MarketListing listing = filtered.get(index++);
@@ -386,9 +608,19 @@ public final class MarketGuiController {
             display.setAmount(displayAmount);
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
-                List<String> lore = meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
+                if (isBundle(listing)) {
+                    meta.setDisplayName(bundleDisplayName(listing));
+                } else if (!meta.hasDisplayName()) {
+                    meta.setDisplayName(ChatColor.RESET + ItemLocalization.getPlainName(listing.item()));
+                }
+                List<String> lore = isBundle(listing)
+                        ? new ArrayList<>()
+                        : meta.getLore() != null ? new ArrayList<>(meta.getLore()) : new ArrayList<>();
                 lore.addAll(buildListingLore(listing, listing.amount()));
-                if (listing.sellerId().equals(player.getUniqueId())) {
+                boolean ownListing = listing.sellerId().equals(player.getUniqueId());
+                if (isBundle(listing)) {
+                    addBundleActionLore(lore, ownListing);
+                } else if (ownListing) {
                     lore.add(messages.message("gui.action.collect"));
                 } else {
                     lore.add(messages.message("gui.action.purchase"));
@@ -398,26 +630,28 @@ public final class MarketGuiController {
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
-            inv.setItem(slot, display);
+            setSlot(inv, slot, display);
             view.slotToListingId.put(slot, listing.id());
         }
 
         String baseTitle = (view.searchQuery != null && !view.searchQuery.isEmpty())
-                ? view.searchQuery : messages.message("gui.title.auction");
+                ? view.searchQuery : auctionTitle();
         String newTitle = messages.message("gui.title.auction-pages", Map.of(
                 "name", baseTitle, "page", view.page + 1, "pages", totalPages
         ));
-        if (!player.getOpenInventory().getTitle().equals(newTitle)) {
-            Inventory newInv = Bukkit.createInventory(view, 54, newTitle);
-            newInv.setContents(inv.getContents());
-            view.inventory = newInv;
-            player.openInventory(newInv);
+        if (updateTitle && !player.getOpenInventory().getTitle().equals(newTitle)) {
+            if (!guiUpdates.setTitle(player, inv, newTitle)) {
+                Inventory newInv = Bukkit.createInventory(view, 54, newTitle);
+                newInv.setContents(inv.getContents());
+                view.inventory = newInv;
+                openGui(player, newInv);
+            }
         }
     }
 
     private void updateCategoryIcon(AuctionView view, Map<String, Integer> counts, int allCount) {
         if (view.isSearch) {
-            view.inventory.setItem(SLOT_CATEGORY, null);
+            setSlot(view.inventory, SLOT_CATEGORY, null);
             return;
         }
         Inventory inv = view.inventory;
@@ -446,7 +680,7 @@ public final class MarketGuiController {
             item.setItemMeta(meta);
         }
         hideAttributes(item);
-        inv.setItem(SLOT_CATEGORY, item);
+        setSlot(inv, SLOT_CATEGORY, item);
     }
 
     private Map<String, Integer> categoryCounts() {
@@ -494,9 +728,9 @@ public final class MarketGuiController {
                 black.setItemMeta(blackMeta);
             }
             hideAttributes(black);
-            inv.setItem(52, black);
+            setSlot(inv, 52, black);
         }
-        inv.setItem(sortSlot, item);
+        setSlot(inv, sortSlot, item);
     }
 
     private int getSortOrderPriority(SortType type) {
@@ -534,7 +768,7 @@ public final class MarketGuiController {
             item.setItemMeta(meta);
         }
         hideAttributes(item);
-        view.inventory.setItem(53, item);
+        setSlot(view.inventory, 53, item);
     }
 
     void fillSellerInventory(SellerView view) {
@@ -547,7 +781,7 @@ public final class MarketGuiController {
         int index = 0;
         for (int slot : SELLER_SLOTS) {
             if (index >= listings.size()) {
-                view.inventory.setItem(slot, null);
+                setSlot(view.inventory, slot, null);
                 continue;
             }
             MarketListing listing = listings.get(index++);
@@ -555,14 +789,16 @@ public final class MarketGuiController {
             display.setAmount(Math.max(1, Math.min(listing.amount(), display.getMaxStackSize())));
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
+                if (isBundle(listing)) meta.setDisplayName(bundleDisplayName(listing));
                 List<String> lore = new ArrayList<>(buildListingLore(listing, listing.amount()));
-                lore.add(messages.message("gui.action.purchase"));
+                if (isBundle(listing)) addBundleActionLore(lore, false);
+                else lore.add(messages.message("gui.action.purchase"));
                 meta.setLore(lore);
                 applyDisplayFlags(meta);
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
-            view.inventory.setItem(slot, display);
+                setSlot(view.inventory, slot, display);
             view.slotToListingId.put(slot, listing.id());
         }
         updateSellerSortIcon(view);
@@ -635,12 +871,13 @@ public final class MarketGuiController {
     private void openMyItems(Player player) {
         UUID viewerId = player.getUniqueId();
         MyItemsView view = new MyItemsView();
+        view.controller = this;
         view.inventory = Bukkit.createInventory(view, 54,
-                ChatColor.DARK_GRAY + messages.message("gui.title.my-items"));
+                ChatColor.DARK_GRAY + (donateAuction ? "Мои донат-товары" : messages.message("gui.title.my-items")));
         view.slotToListingId = new HashMap<>();
         myItemsViews.put(viewerId, view);
         fillMyItemsInventory(viewerId, view);
-        player.openInventory(view.inventory);
+        openGui(player, view.inventory);
     }
 
     void fillMyItemsInventory(UUID viewerId, MyItemsView view) {
@@ -653,7 +890,7 @@ public final class MarketGuiController {
                 .iterator();
         for (int slot : SELLER_SLOTS) {
             if (!listings.hasNext()) {
-                view.inventory.setItem(slot, null);
+                setSlot(view.inventory, slot, null);
                 continue;
             }
             MarketListing listing = listings.next();
@@ -661,6 +898,7 @@ public final class MarketGuiController {
             display.setAmount(Math.max(1, Math.min(listing.amount(), display.getMaxStackSize())));
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
+                if (isBundle(listing)) meta.setDisplayName(bundleDisplayName(listing));
                 List<String> lore = new ArrayList<>(buildListingLore(listing, listing.amount()));
                 lore.add(messages.message("listing.status-title"));
                 lore.add(messages.message("listing.status-amount", Map.of("amount", listing.amount())));
@@ -675,11 +913,11 @@ public final class MarketGuiController {
                 display.setItemMeta(meta);
             }
             hideAttributes(display);
-            view.inventory.setItem(slot, display);
+            setSlot(view.inventory, slot, display);
             view.slotToListingId.put(slot, listing.id());
         }
-        view.inventory.setItem(SLOT_BACK_BOTTOM,
-                createIcon(ICON_BACK, messages.message("gui.action.back")));
+        setSlot(view.inventory, SLOT_BACK_BOTTOM,
+                texturedHead(BUNDLE_PREVIOUS_TEXTURE, messages.message("gui.action.back")));
     }
 
     void handleMyItemsClick(Player player, MyItemsView view, int slot) {
@@ -694,49 +932,113 @@ public final class MarketGuiController {
         MarketListing listing = loadListingById(id);
         if (listing == null || listing.amount() <= 0) {
             player.sendMessage(messages.message("error.listing-unavailable"));
-            view.inventory.setItem(slot, null);
+            setSlot(view.inventory, slot, null);
             view.slotToListingId.remove(slot);
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
         }
-        ItemStack item = listing.item().clone();
-        item.setAmount(listing.amount());
-        hideAttributes(item);
-        Map<Integer, ItemStack> overflow = player.getInventory().addItem(item);
-        overflow.values().forEach(value -> player.getWorld().dropItemNaturally(player.getLocation(), value));
+        giveItemsOrDrop(player, deliveryItems(listing, listing.amount()));
         repository.delete(listing.id());
         sync().listingRemoved(listing.id());
         Component itemName = ItemLocalization.getNameComponent(listing.item());
         player.sendMessage(component(messages.message("notification.collected-prefix"))
                 .append(itemName.color(NamedTextColor.YELLOW)));
         player.playSound(player.getLocation(), Sound.BLOCK_CHEST_CLOSE, 0.9f, 1.1f);
-        view.inventory.setItem(slot, null);
+        setSlot(view.inventory, slot, null);
         view.slotToListingId.remove(slot);
+    }
+
+    private void openBundlePreview(Player player, MarketListing listing) {
+        List<ItemStack> contents = bundleItems(listing);
+        if (contents.isEmpty()) {
+            player.sendMessage(messages.message("error.listing-unavailable"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
+            return;
+        }
+
+        BundlePreviewView view = new BundlePreviewView();
+        view.controller = this;
+        view.listing = listing;
+        view.inventory = Bukkit.createInventory(view, 54,
+                bundleDisplayName(listing));
+        fillBundlePreview(player, view);
+        openGui(player, view.inventory);
+        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.1f);
+    }
+
+    private void fillBundlePreview(Player player, BundlePreviewView view) {
+        List<ItemStack> contents = bundleItems(view.listing);
+        decorateBundlePreview(view.inventory);
+        for (int index = 0; index < AUCTION_SLOTS.length; index++) {
+            if (index >= contents.size()) {
+                setSlot(view.inventory, AUCTION_SLOTS[index], null);
+                continue;
+            }
+            ItemStack display = contents.get(index).clone();
+            ItemMeta meta = display.getItemMeta();
+            if (meta != null && !meta.hasDisplayName()) {
+                meta.setDisplayName(ChatColor.RESET + ItemLocalization.getPlainName(display));
+                applyDisplayFlags(meta);
+                display.setItemMeta(meta);
+            }
+            setSlot(view.inventory, AUCTION_SLOTS[index], display);
+        }
+
+        setSlot(view.inventory, SLOT_BUNDLE_BACK,
+                texturedHead(BUNDLE_PREVIOUS_TEXTURE, messages.message("gui.action.back")));
+    }
+
+    private void decorateBundlePreview(Inventory inventory) {
+        ItemStack black = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
+        ItemMeta blackMeta = black.getItemMeta();
+        if (blackMeta != null) {
+            blackMeta.setDisplayName(" ");
+            black.setItemMeta(blackMeta);
+        }
+        hideAttributes(black);
+
+        ItemStack orange = new ItemStack(Material.ORANGE_STAINED_GLASS_PANE);
+        ItemMeta orangeMeta = orange.getItemMeta();
+        if (orangeMeta != null) {
+            orangeMeta.setDisplayName(" ");
+            orange.setItemMeta(orangeMeta);
+        }
+        hideAttributes(orange);
+
+        for (int slot : AUCTION_BLACK_SLOTS) setSlot(inventory, slot, black);
+        for (int slot : AUCTION_ORANGE_SLOTS) setSlot(inventory, slot, orange);
+    }
+
+    void handleBundlePreviewClick(Player player, BundlePreviewView view, int slot) {
+        if (slot != SLOT_BUNDLE_BACK) return;
+        openAuction(player);
+        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.0f);
     }
 
     private void openPurchaseGui(Player player, MarketListing listing) {
         PurchaseView view = new PurchaseView();
+        view.controller = this;
         view.listing = listing;
         view.maxAmount = listing.amount();
         view.quantity = 1;
         view.sellerId = listing.sellerId();
         view.inventory = Bukkit.createInventory(view, 54,
-                ChatColor.DARK_GRAY + messages.message("gui.title.purchase"));
+                ChatColor.DARK_GRAY + (donateAuction ? "Покупка за PlayerPoints" : messages.message("gui.title.purchase")));
         purchaseViews.put(player.getUniqueId(), view);
         decoratePurchase(view.inventory);
-        view.inventory.setItem(SLOT_BACK_TOP,
-                createIcon(ICON_BACK, messages.message("gui.action.back")));
-        view.inventory.setItem(SLOT_MINUS_1, createIcon(Material.RED_WOOL, "§c-1"));
-        view.inventory.setItem(SLOT_MINUS_10, createIcon(Material.RED_WOOL, "§c-10"));
-        view.inventory.setItem(SLOT_PLUS_1, createIcon(Material.GREEN_WOOL, "§a+1"));
-        view.inventory.setItem(SLOT_PLUS_10, createIcon(Material.GREEN_WOOL, "§a+10"));
+        setSlot(view.inventory, SLOT_BACK_TOP,
+                texturedHead(BUNDLE_PREVIOUS_TEXTURE, messages.message("gui.action.back")));
+        setSlot(view.inventory, SLOT_MINUS_1, createIcon(Material.RED_WOOL, "§c-1"));
+        setSlot(view.inventory, SLOT_MINUS_10, createIcon(Material.RED_WOOL, "§c-10"));
+        setSlot(view.inventory, SLOT_PLUS_1, createIcon(Material.GREEN_WOOL, "§a+1"));
+        setSlot(view.inventory, SLOT_PLUS_10, createIcon(Material.GREEN_WOOL, "§a+10"));
         Inventory inv = view.inventory;
         PurchaseView pv = view;
 
         ItemStack buy = createIcon(
                 ICON_BUY, messages.message("gui.action.buy")
         );
-        inv.setItem(SLOT_BUY, buy);
+        setSlot(inv, SLOT_BUY, buy);
 
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta sm = (SkullMeta) head.getItemMeta();
@@ -757,10 +1059,10 @@ public final class MarketGuiController {
             head.setItemMeta(sm);
         }
         hideAttributes(head);
-        inv.setItem(SLOT_SELLER_HEAD, head);
+        setSlot(inv, SLOT_SELLER_HEAD, head);
 
         updateQuantityItems(pv);
-        player.openInventory(inv);
+        openGui(player, inv);
         player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.1f);
     }
 
@@ -780,10 +1082,10 @@ public final class MarketGuiController {
         }
         hideAttributes(orange);
         for (int slot : PURCHASE_BLACK_SLOTS) {
-            inv.setItem(slot, black);
+            setSlot(inv, slot, black);
         }
         for (int slot : PURCHASE_ORANGE_SLOTS) {
-            inv.setItem(slot, orange);
+            setSlot(inv, slot, orange);
         }
     }
 
@@ -796,6 +1098,7 @@ public final class MarketGuiController {
         preview.setAmount(displayAmount);
         ItemMeta pm = preview.getItemMeta();
         if (pm != null) {
+            if (isBundle(listing)) pm.setDisplayName(bundleDisplayName(listing));
             List<String> lore = new ArrayList<>();
             lore.addAll(buildListingLore(listing, pv.quantity));
             pm.setLore(lore);
@@ -804,7 +1107,7 @@ public final class MarketGuiController {
         }
         hideAttributes(preview);
 
-        inv.setItem(SLOT_PREVIEW, preview);
+        setSlot(inv, SLOT_PREVIEW, preview);
         ItemStack buy = inv.getItem(SLOT_BUY);
     }
 
@@ -887,8 +1190,19 @@ public final class MarketGuiController {
             return;
         }
         double totalPrice = fresh.pricePerUnit() * requestedAmount;
-        if (!economy.has(player, totalPrice)) {
+        if (!payment.has(player, totalPrice)) {
             player.sendMessage(messages.message("error.insufficient-funds"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
+            return;
+        }
+        List<ItemStack> delivery = deliveryItems(fresh, requestedAmount);
+        if (delivery.isEmpty()) {
+            player.sendMessage(messages.message("error.listing-unavailable"));
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
+            return;
+        }
+        if (!canFitAll(player, delivery)) {
+            player.sendMessage("§cНедостаточно места в инвентаре для покупки этого набора.");
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
         }
@@ -902,17 +1216,23 @@ public final class MarketGuiController {
         fresh = reservation.listing();
         int toBuy = reservation.quantity();
         totalPrice = fresh.pricePerUnit() * toBuy;
-        var withdrawal = economy.withdrawPlayer(player, totalPrice);
-        if (!withdrawal.transactionSuccess()) {
+        delivery = deliveryItems(fresh, toBuy);
+        if (delivery.isEmpty() || !canFitAll(player, delivery)) {
+            repository.rollbackReservation(fresh.id(), toBuy);
+            player.sendMessage("§cНедостаточно места в инвентаре для покупки этого набора.");
+            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
+            refreshAllViews();
+            return;
+        }
+        if (!payment.withdraw(player, totalPrice)) {
             repository.rollbackReservation(fresh.id(), toBuy);
             player.sendMessage(messages.message("error.insufficient-funds"));
             refreshAllViews();
             return;
         }
         OfflinePlayer seller = Bukkit.getOfflinePlayer(fresh.sellerId());
-        var deposit = economy.depositPlayer(seller, totalPrice);
-        if (!deposit.transactionSuccess()) {
-            economy.depositPlayer(player, totalPrice);
+        if (!payment.deposit(seller, totalPrice)) {
+            payment.deposit(player, totalPrice);
             repository.rollbackReservation(fresh.id(), toBuy);
             player.sendMessage(messages.message("error.purchase-failed"));
             refreshAllViews();
@@ -933,25 +1253,19 @@ public final class MarketGuiController {
                     .append(component(messages.message("notification.seller-sale-middle")))
                     .append(itemName.color(NamedTextColor.YELLOW))
                     .append(component(messages.message("notification.price-separator")))
-                    .append(Component.text(formatMoney(totalPrice) + "⛁", NamedTextColor.GREEN));
+                    .append(component(formatPrice(totalPrice)));
 
             sp.sendMessage(msg);
             sp.playSound(sp.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.4f);
         }
 
-        ItemStack give = fresh.item().clone();
-        give.setAmount(toBuy);
-        hideAttributes(give);
-        HashMap<Integer, ItemStack> left = player.getInventory().addItem(give);
-        if (!left.isEmpty()) {
-            left.values().forEach(it -> player.getWorld().dropItemNaturally(player.getLocation(), it));
-        }
+        giveItemsOrDrop(player, delivery);
 
         Component itemName = ItemLocalization.getNameComponent(fresh.item());
         Component msg = component(messages.message("notification.purchased-prefix"))
                 .append(itemName.color(NamedTextColor.YELLOW))
                 .append(component(messages.message("notification.price-separator")))
-                .append(Component.text(formatMoney(totalPrice) + "⛁", NamedTextColor.GREEN));
+                .append(component(formatPrice(totalPrice)));
 
         player.sendMessage(msg);
         player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.25f);
@@ -969,12 +1283,14 @@ public final class MarketGuiController {
             return;
         }
         SellerView sv = new SellerView();
+        sv.controller = this;
         sv.sellerId = sellerId;
         sv.slotToListingId = new HashMap<>();
         OfflinePlayer seller = Bukkit.getOfflinePlayer(sellerId);
         String sellerName = seller.getName() != null ? seller.getName() : sellerId.toString();
         Inventory inv = Bukkit.createInventory(sv, 54, ChatColor.DARK_GRAY
-                + messages.message("gui.title.seller", Map.of("seller", sellerName)));
+                + (donateAuction ? "Донат-товары " + sellerName
+                : messages.message("gui.title.seller", Map.of("seller", sellerName))));
         sv.inventory = inv;
         sellerViews.put(viewer.getUniqueId(), sv);
         decoratePurchase(inv);
@@ -999,13 +1315,13 @@ public final class MarketGuiController {
             info.setItemMeta(im);
         }
         hideAttributes(info);
-        inv.setItem(13, info);
-        ItemStack back = createIcon(
-                ICON_BACK, messages.message("gui.action.back")
+        setSlot(inv, 13, info);
+        ItemStack back = texturedHead(
+                BUNDLE_PREVIOUS_TEXTURE, messages.message("gui.action.back")
         );
-        inv.setItem(45, back);
+        setSlot(inv, 45, back);
         fillSellerInventory(sv);
-        viewer.openInventory(inv);
+        openGui(viewer, inv);
     }
 
     void handleSellerClick(Player player, SellerView sv, int slot, boolean leftClick, boolean rightClick) {
@@ -1034,7 +1350,7 @@ public final class MarketGuiController {
         MarketListing listing = loadListingById(id);
         if (listing == null || listing.amount() <= 0 || !"ACTIVE".equalsIgnoreCase(listing.status())) {
             player.sendMessage(messages.message("error.listing-unavailable"));
-            sv.inventory.setItem(slot, null);
+            setSlot(sv.inventory, slot, null);
             sv.slotToListingId.remove(slot);
             refreshAllViews();
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
@@ -1048,7 +1364,8 @@ public final class MarketGuiController {
         }
 
         sellerViews.remove(player.getUniqueId());
-        openPurchaseGui(player, listing);
+        if (isBundle(listing) && leftClick) openBundlePreview(player, listing);
+        else openPurchaseGui(player, listing);
     }
 
 
@@ -1076,13 +1393,14 @@ public final class MarketGuiController {
     }
 
     void handleAuctionClick(Player player, AuctionView view, int slot, boolean leftClick, boolean rightClick) {
+        if (slot == SLOT_DONATE_AUCTION) {
+            if (view.isSearch) openAuction(player);
+            else plugin.openAuction(player, !donateAuction);
+            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.1f);
+            return;
+        }
         if (slot == SLOT_MY_ITEMS) {
-            if (view.isSearch) {
-                auctionViews.remove(player.getUniqueId());
-                openAuction(player);
-            } else {
-                openMyItems(player);
-            }
+            openMyItems(player);
             player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.1f);
             return;
         }
@@ -1142,16 +1460,24 @@ public final class MarketGuiController {
         }
         UUID viewerId = player.getUniqueId();
         if (listing.sellerId().equals(viewerId)) {
+            if (isBundle(listing) && leftClick) {
+                openBundlePreview(player, listing);
+                return;
+            }
             repository.updateStatus(listing.id(), "RETURNED");
             sync().listingUpdated(listing.withStatus("RETURNED"));
-            view.inventory.setItem(slot, null);
+            setSlot(view.inventory, slot, null);
             view.slotToListingId.remove(slot);
             player.sendMessage(messages.message("success.listing-returned"));
             player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.3f);
             return;
         }
+        if (isBundle(listing) && leftClick) {
+            openBundlePreview(player, listing);
+            return;
+        }
         double minCost = listing.pricePerUnit();
-        if (!economy.has(player, minCost)) {
+        if (!payment.has(player, minCost)) {
             player.sendMessage(messages.message("error.insufficient-funds"));
             showNoMoneyBarrier(player, view, slot, listing);
             return;
@@ -1166,7 +1492,7 @@ public final class MarketGuiController {
         else if (inventory.getHolder() instanceof AuctionView) auctionViews.remove(viewerId);
     }
 
-    void removeViewer(UUID viewerId) {
+    public void removeViewer(UUID viewerId) {
         purchaseViews.remove(viewerId);
         myItemsViews.remove(viewerId);
         auctionViews.remove(viewerId);
@@ -1178,6 +1504,14 @@ public final class MarketGuiController {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             applyDisplayFlags(meta);
+            if (MarketBundle.isBundle(plugin, item)) {
+                if (!meta.hasDisplayName()) meta.setDisplayName("§6Набор");
+                try {
+                    meta.addItemFlags(ItemFlag.valueOf("HIDE_ADDITIONAL_TOOLTIP"));
+                } catch (IllegalArgumentException ignored) {
+                    // Legacy server versions do not expose this item flag.
+                }
+            }
             item.setItemMeta(meta);
         }
         return item;

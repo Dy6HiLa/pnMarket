@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.UUID;
 
 final class AuctionView implements InventoryHolder {
+    MarketGuiController controller;
     UUID viewer;
     Inventory inventory;
     Map<Integer, String> slotToListingId = new HashMap<>();

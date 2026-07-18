@@ -24,38 +24,47 @@ public final class MarketInventoryListener implements Listener {
         Inventory clicked = event.getClickedInventory();
         if (clicked == null) return;
 
+        if (top.getHolder() instanceof BundlePreviewView view) {
+            event.setCancelled(true);
+            if (clicked.equals(top)) view.controller.handleBundlePreviewClick(player, view, event.getRawSlot());
+            return;
+        }
         if (top.getHolder() instanceof MyItemsView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) plugin.gui().handleMyItemsClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) view.controller.handleMyItemsClick(player, view, event.getRawSlot());
             return;
         }
         if (top.getHolder() instanceof SellerView view) {
             event.setCancelled(true);
             if (clicked.equals(top)) {
-                plugin.gui().handleSellerClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+                view.controller.handleSellerClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
             }
             return;
         }
         if (top.getHolder() instanceof PurchaseView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) plugin.gui().handlePurchaseClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) view.controller.handlePurchaseClick(player, view, event.getRawSlot());
             return;
         }
         if (top.getHolder() instanceof AuctionView view) {
             event.setCancelled(true);
             if (!player.getUniqueId().equals(view.viewer) || !clicked.equals(top)) return;
-            plugin.gui().handleAuctionClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+            view.controller.handleAuctionClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
         }
     }
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
-        plugin.gui().closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        if (event.getInventory().getHolder() instanceof AuctionView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof PurchaseView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof SellerView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof MyItemsView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof BundlePreviewView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
     }
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
-        plugin.gui().removeViewer(event.getPlayer().getUniqueId());
+        plugin.removeViewer(event.getPlayer().getUniqueId());
     }
 
     @EventHandler

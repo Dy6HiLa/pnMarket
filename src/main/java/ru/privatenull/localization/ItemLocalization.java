@@ -31,6 +31,9 @@ public final class ItemLocalization {
         Material material = stack.getType();
         String key = "item.minecraft." + material.name().toLowerCase(Locale.ROOT);
         String localized = LangRu.tr(key);
+        if ((localized == null || localized.isBlank()) && material.isBlock()) {
+            localized = LangRu.tr("block.minecraft." + material.name().toLowerCase(Locale.ROOT));
+        }
         if (localized != null && !localized.isBlank()) return localized;
 
         String raw = material.name().toLowerCase(Locale.ROOT).replace('_', ' ');

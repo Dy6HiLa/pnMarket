@@ -5,14 +5,9 @@ import org.bukkit.inventory.InventoryHolder;
 import org.jetbrains.annotations.NotNull;
 import ru.privatenull.model.MarketListing;
 
-import java.util.UUID;
-
-final class PurchaseView implements InventoryHolder {
+final class BundlePreviewView implements InventoryHolder {
     MarketGuiController controller;
     MarketListing listing;
-    int maxAmount;
-    int quantity;
-    UUID sellerId;
     Inventory inventory;
 
     @Override

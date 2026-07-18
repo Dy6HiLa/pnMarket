@@ -6,10 +6,12 @@ authors: [ privatenull ]
 description: pnMarket - AuctionPlugin
 website: https://github.com/Dy6HiLa/pnMarket
 depend: [Vault]
+softdepend: [PlayerPoints]
 commands:
+  dah:
+    description: Команда для открытия аукциона pnMarket
   ah:
-    description: Открыть аукцион pnMarket
-    usage: /ah [sell <цена>|search <название>|show <игрок>|reload]
+    description: Команда для открытия аукциона pnMarket
 permissions:
   pnmarket.admin:
     description: Получать уведомления об обновлениях pnMarket

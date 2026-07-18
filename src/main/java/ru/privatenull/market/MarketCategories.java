@@ -25,7 +25,7 @@ public final class MarketCategories {
             String materialName = item.getType().name();
             if (materialContains.stream().anyMatch(materialName::contains)) return true;
             String displayName = item.hasItemMeta() && item.getItemMeta().hasDisplayName()
-                    ? ChatColor.stripColor(item.getItemMeta().getDisplayName()).toLowerCase(Locale.ROOT) : "";
+                    ? ChatColor.stripColor(item.getItemMeta().getDisplayName()).toUpperCase(Locale.ROOT) : "";
             return nameContains.stream().anyMatch(displayName::contains);
         }
     }

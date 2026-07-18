@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.UUID;
 
 final class SellerView implements InventoryHolder {
+    MarketGuiController controller;
     UUID sellerId;
     Inventory inventory;
     Map<Integer, String> slotToListingId;

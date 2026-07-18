@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest">
-    <img src="https://img.shields.io/badge/Скачать-v1.0.0-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.0">
+    <img src="https://img.shields.io/badge/Скачать-v1.0.1-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.1">
   </a>
   <a href="https://github.com/Dy6HiLa/pnMarket/releases">
     <img src="https://img.shields.io/badge/Releases-GitHub-5A8DEE?style=for-the-badge&labelColor=17241F" alt="GitHub Releases">
@@ -66,13 +66,13 @@
 <a id="installation"></a>
 ## Установка
 
-1. Скачайте [`pnMarket-1.0.0.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
+1. Скачайте [`pnMarket-1.0.1.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
 2. Поместите файл в папку сервера `plugins/`.
-3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики.
+3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики. Для донат-аукциона `/dah` дополнительно установите PlayerPoints.
 4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
 5. При необходимости измените `plugins/pnMarket/config.yml` и выполните полный перезапуск сервера.
 
-**Требования:** Paper 1.17–1.21.x, Java 17 или новее, Vault и плагин экономики. Для MySQL и MongoDB нужен доступный внешний сервер БД.
+**Требования:** Paper 1.17–1.21.x, Java 17 или новее, Vault и плагин экономики. PlayerPoints требуется только для `/dah`. Для MySQL и MongoDB нужен доступный внешний сервер БД.
 
 > Paper 1.16.5 доступен как экспериментальный режим. Базовый аукцион и GUI запускаются на этой версии, но совместимость ещё тестируется. Если встретили ошибку на 1.16.5, напишите в [Discord-поддержку](https://discord.gg/rRbzq6cnc6), приложив версию Paper, Java и полный текст ошибки из консоли.
 
@@ -85,9 +85,15 @@
 | --- | --- |
 | `/ah` | Открыть аукцион. |
 | `/ah sell <цена>` | Выставить предмет из основной руки. |
+| `/ah kit <цена>` | Выставить набор из занятых слотов основного инвентаря. |
 | `/ah search <название>` | Открыть результаты поиска. |
 | `/ah show <игрок>` | Открыть лоты игрока. |
 | `/ah reload` | Перезагрузить `config.yml`, `messages.yml`, категории и проверку обновлений. |
+| `/dah` | Открыть донат-аукцион за PlayerPoints. |
+| `/dah sell <цена>` | Выставить предмет в донат-аукционе. |
+| `/dah kit <цена>` | Выставить набор в донат-аукционе. |
+| `/dah search <название>` | Найти лот в донат-аукционе. |
+| `/dah show <игрок>` | Открыть донат-лоты игрока. |
 
 | Право | Назначение |
 | --- | --- |
@@ -204,7 +210,7 @@ plugins/pnMarket/
 ./gradlew.bat clean test releaseJar
 ```
 
-Готовый файл появится по пути `release/pnMarket-1.0.0.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
+Готовый файл появится по пути `release/pnMarket-1.0.1.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
 
 <a id="support"></a>
 ## Поддержка

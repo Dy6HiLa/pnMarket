@@ -7,6 +7,7 @@ command:
   sell-usage: "{prefix} &fИспользование: /ah sell <цена>"
   search-usage: "{prefix} &fИспользование: /ah search <название>"
   seller-usage: "{prefix} &fИспользование: /ah show <ник>"
+  usage: "{prefix} &fИспользование: &e{command}"
 
 error:
   invalid-price: "{prefix} &fНекорректная цена."
