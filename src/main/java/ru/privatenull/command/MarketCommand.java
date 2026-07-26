@@ -3,6 +3,7 @@ package ru.privatenull.command;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Sound;
+import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -19,7 +20,8 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class MarketCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBCOMMANDS = List.of("sell", "kit", "search", "show", "help", "reload");
+    private static final List<String> SUBCOMMANDS =
+            List.of("sell", "kit", "notify", "search", "show", "help", "reload");
 
     private final PnMarketPlugin plugin;
     private final boolean donate;
@@ -51,6 +53,7 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
             }
             case "sell" -> sell(player, args);
             case "kit" -> kit(player, args);
+            case "notify" -> notify(player, args);
             case "search" -> search(player, args);
             case "show", "snow" -> show(player, args);
             case "help", "?" -> help(player);
@@ -71,6 +74,21 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("search")) {
             return MarketSearch.tabComplete(plugin.activeListings(donate), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("notify")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return List.of("material", "name", "clear").stream()
+                    .filter(value -> value.startsWith(prefix))
+                    .toList();
+        }
+        if (args.length == 3 && args[0].equalsIgnoreCase("notify")
+                && args[1].equalsIgnoreCase("material")) {
+            String prefix = args[2].toUpperCase(Locale.ROOT);
+            return java.util.Arrays.stream(Material.values())
+                    .map(Material::name)
+                    .filter(value -> value.startsWith(prefix))
+                    .limit(50)
+                    .toList();
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("show") || args[0].equalsIgnoreCase("snow"))) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
@@ -107,10 +125,49 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
 
     private boolean kit(Player player, String[] args) {
         if (args.length < 2) {
-            usage(player, donate ? "/dah kit <цена>" : "/ah kit <цена>");
+            usage(player, donate ? "/dah kit <цена> [название]" : "/ah kit <цена> [название]");
             return true;
         }
-        plugin.sellKit(player, args[1], donate);
+        String name = args.length > 2
+                ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length))
+                : "Набор";
+        plugin.sellKit(player, args[1], donate, name);
+        return true;
+    }
+
+    private boolean notify(Player player, String[] args) {
+        String root = donate ? "/dah" : "/ah";
+        if (args.length == 1) {
+            plugin.openFavorites(player, donate);
+            return true;
+        }
+        String action = args[1].toLowerCase(Locale.ROOT);
+        if (action.equals("clear")) {
+            plugin.favorites().clear(player.getUniqueId(), donate);
+            player.sendMessage(plugin.messages().message("notification.favorite-cleared"));
+            return true;
+        }
+        if (args.length < 3) {
+            usage(player, root + " notify <material|name|clear> <значение>");
+            return true;
+        }
+        var result = action.equals("material")
+                ? plugin.favorites().addMaterial(player.getUniqueId(), donate,
+                String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)))
+                : action.equals("name")
+                ? plugin.favorites().addName(player.getUniqueId(), donate,
+                String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length)))
+                : null;
+        if (result == null) {
+            usage(player, root + " notify <material|name|clear> <значение>");
+            return true;
+        }
+        switch (result) {
+            case ADDED -> player.sendMessage(plugin.messages().message("notification.favorite-added"));
+            case DUPLICATE -> player.sendMessage(plugin.messages().message("notification.favorite-duplicate"));
+            case LIMIT -> player.sendMessage(plugin.messages().message("notification.favorite-limit"));
+            case INVALID -> player.sendMessage(plugin.messages().message("notification.favorite-invalid"));
+        }
         return true;
     }
 
@@ -150,7 +207,8 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("  §6§lАУКЦИОН");
         player.sendMessage("§8  ▸ §e" + root + " §8— §fоткрыть аукцион");
         player.sendMessage("§8  ▸ §e" + root + " sell <цена> §8— §fвыставить предмет из руки");
-        player.sendMessage("§8  ▸ §e" + root + " kit <цена> §8— §fвыставить набор из инвентаря");
+        player.sendMessage("§8  ▸ §e" + root + " kit <цена> [название] §8— §fвыставить набор");
+        player.sendMessage("§8  ▸ §e" + root + " notify §8— §fизбранное и уведомления");
         player.sendMessage("§8  ▸ §e" + root + " search <название> §8— §fнайти лот");
         player.sendMessage("§8  ▸ §e" + root + " show <игрок> §8— §fпосмотреть товары игрока");
         if (!donate && player.hasPermission("pnmarket.admin")) {

@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest">
-    <img src="https://img.shields.io/badge/Скачать-v1.0.1-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.1">
+    <img src="https://img.shields.io/badge/Скачать-v1.0.2-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.2">
   </a>
   <a href="https://github.com/Dy6HiLa/pnMarket/releases">
     <img src="https://img.shields.io/badge/Releases-GitHub-5A8DEE?style=for-the-badge&labelColor=17241F" alt="GitHub Releases">
@@ -66,7 +66,7 @@
 <a id="installation"></a>
 ## Установка
 
-1. Скачайте [`pnMarket-1.0.1.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
+1. Скачайте [`pnMarket-1.0.2.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
 2. Поместите файл в папку сервера `plugins/`.
 3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики. Для донат-аукциона `/dah` дополнительно установите PlayerPoints.
 4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
@@ -85,19 +85,23 @@
 | --- | --- |
 | `/ah` | Открыть аукцион. |
 | `/ah sell <цена>` | Выставить предмет из основной руки. |
-| `/ah kit <цена>` | Выставить набор из занятых слотов основного инвентаря. |
+| `/ah kit <цена> [название]` | Открыть предпросмотр и выставить набор из занятых слотов основного инвентаря. |
+| `/ah notify` | Открыть избранное обычного аукциона. |
+| `/ah notify material <материал>` | Добавить уведомление по Bukkit ID или русскому названию материала. |
+| `/ah notify name <название>` | Добавить уведомление по части названия. |
 | `/ah search <название>` | Открыть результаты поиска. |
 | `/ah show <игрок>` | Открыть лоты игрока. |
 | `/ah reload` | Перезагрузить `config.yml`, `messages.yml`, категории и проверку обновлений. |
 | `/dah` | Открыть донат-аукцион за PlayerPoints. |
 | `/dah sell <цена>` | Выставить предмет в донат-аукционе. |
-| `/dah kit <цена>` | Выставить набор в донат-аукционе. |
+| `/dah kit <цена> [название]` | Открыть предпросмотр и выставить набор в донат-аукционе. |
+| `/dah notify` | Открыть отдельное избранное донат-аукциона. |
 | `/dah search <название>` | Найти лот в донат-аукционе. |
 | `/dah show <игрок>` | Открыть донат-лоты игрока. |
 
 | Право | Назначение |
 | --- | --- |
-| `pnmarket.admin` | Использование `/ah reload` и уведомления о новых версиях. |
+| `pnmarket.admin` | `/ah reload`, уведомления о версиях и статистика цен в описании лотов. |
 
 <a id="configuration"></a>
 ## Настройка
@@ -121,6 +125,31 @@ limits:
 listing-price:
   minimum: 10
   maximum: 1000000
+```
+
+### Наборы, статистика и уведомления
+
+Лимит набора определяется основной Vault-группой. Перед выставлением игрок видит
+содержимое, название, редкость, цену и объём данных; предметы забираются только
+после подтверждения.
+
+```yml
+kits:
+  max-slots:
+    default: 10
+    vip: 15
+    admin: 36
+  max-serialized-bytes: 131072
+  blocked-materials: [BEDROCK, BARRIER, COMMAND_BLOCK]
+
+price-statistics:
+  enabled: true
+  permission: "pnmarket.admin"
+  minimum-samples: 1
+
+notifications:
+  enabled: true
+  max-favorites: 10
 ```
 
 ### Собственные категории
@@ -210,7 +239,7 @@ plugins/pnMarket/
 ./gradlew.bat clean test releaseJar
 ```
 
-Готовый файл появится по пути `release/pnMarket-1.0.1.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
+Готовый файл появится по пути `release/pnMarket-1.0.2.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
 
 <a id="support"></a>
 ## Поддержка

@@ -99,13 +99,18 @@ public final class MarketSync {
     }
 
     private void queueRender() {
+        if (!plugin.isEnabled()) return;
         if (!renderQueued.compareAndSet(false, true)) return;
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            try {
-                plugin.renderAllViews();
-            } finally {
-                renderQueued.set(false);
-            }
-        });
+        try {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                try {
+                    plugin.renderAllViews();
+                } finally {
+                    renderQueued.set(false);
+                }
+            });
+        } catch (RuntimeException exception) {
+            renderQueued.set(false);
+        }
     }
 }

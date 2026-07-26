@@ -39,7 +39,33 @@ prefix-playerpoints: "&d{price} PP"
 
 # /ah kit и /dah kit забирают занятые слоты основного инвентаря в один лот.
 kits:
-  max-slots: 18
+  # Лимит занятых слотов зависит от основной Vault-группы игрока.
+  max-slots:
+    default: 10
+    vip: 15
+    admin: 36
+  # Защита БД и клиента от предметов с чрезмерно большим NBT/PDC.
+  max-serialized-bytes: 131072
+  blocked-materials:
+    - BEDROCK
+    - BARRIER
+    - COMMAND_BLOCK
+    - CHAIN_COMMAND_BLOCK
+    - REPEATING_COMMAND_BLOCK
+    - STRUCTURE_BLOCK
+    - STRUCTURE_VOID
+    - JIGSAW
+
+# Статистика активных лотов с полностью похожим предметом.
+price-statistics:
+  enabled: true
+  permission: "pnmarket.admin"
+  minimum-samples: 1
+
+# Избранные материалы/названия и уведомления о новых лотах.
+notifications:
+  enabled: true
+  max-favorites: 10
 
 # Категории отображаются в указанном порядке. Можно добавлять свои секции.
 # Правила категории: materials - точные Material ID, material-contains - часть Material ID,

@@ -27,6 +27,11 @@ public final class VaultPayment implements MarketPayment {
     }
 
     @Override
+    public boolean withdraw(OfflinePlayer player, double amount) {
+        return economy != null && economy.withdrawPlayer(player, amount).transactionSuccess();
+    }
+
+    @Override
     public boolean deposit(OfflinePlayer player, double amount) {
         return economy != null && economy.depositPlayer(player, amount).transactionSuccess();
     }

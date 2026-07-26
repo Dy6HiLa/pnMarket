@@ -5,6 +5,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
@@ -27,6 +28,16 @@ public final class MarketInventoryListener implements Listener {
         if (top.getHolder() instanceof BundlePreviewView view) {
             event.setCancelled(true);
             if (clicked.equals(top)) view.controller.handleBundlePreviewClick(player, view, event.getRawSlot());
+            return;
+        }
+        if (top.getHolder() instanceof BundleCreateView view) {
+            event.setCancelled(true);
+            if (clicked.equals(top)) view.controller.handleBundleCreateClick(player, view, event.getRawSlot());
+            return;
+        }
+        if (top.getHolder() instanceof FavoritesView view) {
+            event.setCancelled(true);
+            if (clicked.equals(top)) view.controller.handleFavoritesClick(player, view, event.getRawSlot());
             return;
         }
         if (top.getHolder() instanceof MyItemsView view) {
@@ -54,12 +65,35 @@ public final class MarketInventoryListener implements Listener {
     }
 
     @EventHandler
+    public void onInventoryDrag(InventoryDragEvent event) {
+        Inventory top = event.getView().getTopInventory();
+        if (!isMarketView(top)) return;
+        int topSize = top.getSize();
+        if (event.getRawSlots().stream().anyMatch(slot -> slot < topSize)) {
+            event.setCancelled(true);
+        }
+    }
+
+    private boolean isMarketView(Inventory inventory) {
+        Object holder = inventory.getHolder();
+        return holder instanceof AuctionView
+                || holder instanceof PurchaseView
+                || holder instanceof SellerView
+                || holder instanceof MyItemsView
+                || holder instanceof BundlePreviewView
+                || holder instanceof BundleCreateView
+                || holder instanceof FavoritesView;
+    }
+
+    @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (event.getInventory().getHolder() instanceof AuctionView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof PurchaseView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof SellerView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof MyItemsView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof BundlePreviewView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof BundleCreateView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof FavoritesView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
     }
 
     @EventHandler

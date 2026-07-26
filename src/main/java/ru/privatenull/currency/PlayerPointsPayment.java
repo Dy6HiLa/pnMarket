@@ -32,6 +32,12 @@ public final class PlayerPointsPayment implements MarketPayment {
     }
 
     @Override
+    public boolean withdraw(OfflinePlayer player, double amount) {
+        int points = toPoints(amount);
+        return points > 0 && api != null && api.take(player.getUniqueId(), points);
+    }
+
+    @Override
     public boolean deposit(OfflinePlayer player, double amount) {
         int points = toPoints(amount);
         return points > 0 && api != null && api.give(player.getUniqueId(), points);

@@ -18,8 +18,11 @@ public final class MarketCategories {
     public static final String ALL = "all";
 
     public record Definition(String id, String displayName, Set<Material> materials,
-                             List<String> materialContains, List<String> nameContains, boolean edible) {
+                             List<String> materialContains, List<String> nameContains,
+                             boolean edible, boolean bundles) {
         boolean matches(ItemStack item) {
+            if (bundles && item.hasItemMeta() && item.getItemMeta().getPersistentDataContainer()
+                    .getKeys().stream().anyMatch(key -> key.getKey().equals("market_bundle"))) return true;
             if (edible && item.getType().isEdible()) return true;
             if (materials.contains(item.getType())) return true;
             String materialName = item.getType().name();
@@ -56,7 +59,8 @@ public final class MarketCategories {
                 logger.warning("Категория " + id + " пропущена: укажите правило отбора предметов.");
                 continue;
             }
-            definitions.add(new Definition(id, category.getString("name", id), materials, materialContains, nameContains, edible));
+            definitions.add(new Definition(id, category.getString("name", id), materials,
+                    materialContains, nameContains, edible, "bundles".equalsIgnoreCase(id)));
         }
         return new MarketCategories(definitions);
     }

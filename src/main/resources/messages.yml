@@ -51,6 +51,20 @@ notification:
   seller-sale-prefix: "&a[Аукцион] &7» &fИгрок &e@{buyer}"
   seller-sale-middle: " купил у вас "
   price-separator: " за "
+  favorite-listing: "{prefix} &fПоявился подходящий лот: &e{item} &8• &fФильтр: {filter} &8• &e{command}"
+  favorite-added: "{prefix} &aУведомление добавлено."
+  favorite-duplicate: "{prefix} &eТакое уведомление уже существует."
+  favorite-limit: "{prefix} &cДостигнут лимит уведомлений."
+  favorite-invalid: "{prefix} &cМатериал или название указаны неверно."
+  favorite-cleared: "{prefix} &fУведомления этого аукциона удалены."
+
+favorites:
+  type:
+    material: "&eМатериал"
+    name: "&eНазвание"
+  filter:
+    material: "&fМатериал: &e{value}"
+    name: "&fНазвание содержит: &e«{value}»"
 
 update:
   available: "{prefix} &eДоступна версия &f{version}&e. Нажмите, чтобы скачать."
@@ -85,6 +99,27 @@ gui:
     line-1: " &7- &fЗдесь находятся ваши лоты,"
     line-2: "    &fкоторые истекли или были"
     line-3: "    &fвозвращены с аукциона."
+  favorites:
+    title: "Избранное и уведомления"
+    icon-name: "&x&D&5&B&F&F&FИзбранное и уведомления"
+    description-title: "&x&9&E&F&C&6&5 «Уведомления о товарах»"
+    description-line-1: " &7- &fПолучайте сообщение, когда"
+    description-line-2: "    &fпоявится подходящий вам лот."
+    commands-title: "&x&D&5&B&F&F&F «Команды»"
+    command-material: " &7- &e{root} notify material <материал>"
+    command-name: " &7- &e{root} notify name <название>"
+    open-action: "&x&7&C&F&F&8&0➥ &fНажмите, &eЛКМ &fчтобы открыть"
+    entry-material: "&x&B&4&E&E&4&1Материал: &f{value}"
+    entry-name: "&x&B&4&E&E&4&1Название: &f{value}"
+    entry-info-title: "&x&9&E&F&C&6&5 «Информация об уведомлении»"
+    entry-type: " &7- &fТип фильтра: {type}"
+    entry-value: " &7- &fЗначение: &e{value}"
+    remove-action: "&x&F&F&0&0&0&0➥ &fНажмите, &eЛКМ &fчтобы удалить"
+    help-name: "&x&D&5&B&F&F&FКак добавить уведомление?"
+    help-title: "&x&9&E&F&C&6&5 «Примеры команд»"
+    help-material: " &7- &e{root} notify material алмаз"
+    help-name-filter: " &7- &e{root} notify name меч"
+    limit: "&x&D&5&B&F&F&F «Ваш список» &7- &f{current}&7/&f{maximum}"
   filter:
     category-title: "&x&E&E&8&0&4&1Категории"
     current-category: " &7- &fТекущая категория: &x&B&4&E&E&4&1{category}"

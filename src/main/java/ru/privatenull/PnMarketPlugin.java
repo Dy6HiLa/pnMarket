@@ -26,6 +26,7 @@ import ru.privatenull.currency.VaultPayment;
 import ru.privatenull.gui.MarketGuiController;
 import ru.privatenull.gui.MarketInventoryListener;
 import ru.privatenull.market.MarketBundle;
+import ru.privatenull.market.FavoriteService;
 import ru.privatenull.market.MarketSync;
 import ru.privatenull.market.MarketCategories;
 import ru.privatenull.model.MarketListing;
@@ -44,6 +45,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.function.Consumer;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class PnMarketPlugin extends JavaPlugin {
     public static final String SUPPORT_DISCORD = "https://discord.gg/rRbzq6cnc6";
@@ -64,7 +69,9 @@ public final class PnMarketPlugin extends JavaPlugin {
     private MarketGuiController gui;
     private MarketGuiController donateGui;
     private MarketCategories categories;
+    private FavoriteService favoriteService;
     private UpdateChecker updateChecker;
+    private final Set<String> pendingListings = ConcurrentHashMap.newKeySet();
 
     @Override
     public void onEnable() {
@@ -90,6 +97,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         }
 
         categories = MarketCategories.load(getConfig(), getLogger());
+        favoriteService = new FavoriteService(this);
         sync = new MarketSync(this, repository);
         gui = new MarketGuiController(this, repository, new VaultPayment(economy), messages, guiLabels, categories, sync, false);
         if (donateRepository != null && playerPoints != null) {
@@ -133,6 +141,10 @@ public final class PnMarketPlugin extends JavaPlugin {
 
     public MarketGuiController gui() {
         return gui;
+    }
+
+    public FavoriteService favorites() {
+        return favoriteService;
     }
 
     public void reloadRuntime() {
@@ -204,6 +216,15 @@ public final class PnMarketPlugin extends JavaPlugin {
         openSellerGui(player, sellerId);
     }
 
+    public void openFavorites(Player player, boolean donate) {
+        MarketGuiController controller = donate ? donateGui : gui;
+        if (controller == null) {
+            openAuction(player, donate);
+            return;
+        }
+        controller.openFavorites(player);
+    }
+
     public void renderAllViews() {
         if (gui != null) gui.renderAllViews();
         if (donateGui != null) donateGui.renderAllViews();
@@ -257,38 +278,43 @@ public final class PnMarketPlugin extends JavaPlugin {
             return;
         }
         int limit = listingLimit(player);
-        if (repository.countActiveListings(player.getUniqueId()) >= limit) {
+        if (!beginListing(player, false, limit, sync)) {
             player.sendMessage(messages.message("error.listing-limit", Map.of("limit", limit)));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
         }
         ItemStack hand = player.getInventory().getItemInMainHand();
         if (hand.getType() == Material.AIR) {
+            endListing(player.getUniqueId(), false);
             reject(player, "error.item-required");
             return;
         }
         int amount = hand.getAmount();
         if (amount <= 0) {
+            endListing(player.getUniqueId(), false);
             reject(player, "error.invalid-amount");
             return;
         }
         ItemStack storedItem = hand.clone();
-        try {
-            MarketListing listing = repository.create(player.getUniqueId(), storedItem, totalPrice / amount,
-                    amount, System.currentTimeMillis());
+        player.getInventory().setItemInMainHand(null);
+        UUID playerId = player.getUniqueId();
+        runStorageAsync(() -> repository.create(playerId, storedItem, totalPrice / amount,
+                        amount, System.currentTimeMillis()), listing -> {
+            endListing(playerId, false);
             sync.listingCreated(listing);
-        } catch (IOException | RuntimeException exception) {
+            favoriteService.notifyListing(listing, false);
+            Component itemName = ItemLocalization.getNameComponent(storedItem);
+            player.sendMessage(component(messages.message("notification.listed-prefix"))
+                    .append(itemName.color(NamedTextColor.YELLOW))
+                    .append(component(messages.message("notification.price-separator")))
+                    .append(component(formatPrice(false, totalPrice, moneyFormat.format(totalPrice)))));
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+        }, exception -> {
+            endListing(playerId, false);
+            restoreItems(player, List.of(storedItem));
             getLogger().warning("Не удалось создать лот: " + exception.getMessage());
             reject(player, "error.serialization");
-            return;
-        }
-        player.getInventory().setItemInMainHand(null);
-        Component itemName = ItemLocalization.getNameComponent(storedItem);
-        player.sendMessage(component(messages.message("notification.listed-prefix"))
-                .append(itemName.color(NamedTextColor.YELLOW))
-                .append(component(messages.message("notification.price-separator")))
-                .append(component(formatPrice(false, totalPrice, moneyFormat.format(totalPrice)))));
-        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+        });
     }
 
     public void sellPoints(Player player, String rawPrice) {
@@ -336,32 +362,39 @@ public final class PnMarketPlugin extends JavaPlugin {
             return;
         }
         int limit = listingLimit(player);
-        if (donateRepository.countActiveListings(player.getUniqueId()) >= limit) {
+        if (!beginListing(player, true, limit, donateSync)) {
             player.sendMessage(messages.message("error.listing-limit", Map.of("limit", limit)));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
         }
         ItemStack storedItem = hand.clone();
-        try {
-            MarketListing listing = donateRepository.create(player.getUniqueId(), storedItem, totalPrice / amount,
-                    amount, System.currentTimeMillis());
+        player.getInventory().setItemInMainHand(null);
+        UUID playerId = player.getUniqueId();
+        runStorageAsync(() -> donateRepository.create(playerId, storedItem, totalPrice / amount,
+                        amount, System.currentTimeMillis()), listing -> {
+            endListing(playerId, true);
             donateSync.listingCreated(listing);
-        } catch (IOException | RuntimeException exception) {
+            favoriteService.notifyListing(listing, true);
+            Component itemName = ItemLocalization.getNameComponent(storedItem);
+            player.sendMessage(component(messages.message("notification.listed-prefix"))
+                    .append(itemName.color(NamedTextColor.YELLOW))
+                    .append(component(messages.message("notification.price-separator")))
+                    .append(component(formatPrice(true, totalPrice, moneyFormat.format(totalPrice)))));
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+        }, exception -> {
+            endListing(playerId, true);
+            restoreItems(player, List.of(storedItem));
             getLogger().warning("Не удалось создать лот донат-аукциона: " + exception.getMessage());
             reject(player, "error.serialization");
-            return;
-        }
-        player.getInventory().setItemInMainHand(null);
-        Component itemName = ItemLocalization.getNameComponent(storedItem);
-        player.sendMessage(component(messages.message("notification.listed-prefix"))
-                .append(itemName.color(NamedTextColor.YELLOW))
-                .append(component(messages.message("notification.price-separator")))
-                .append(component(formatPrice(true, totalPrice, moneyFormat.format(totalPrice)))));
-        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+        });
     }
 
-    /** Creates one auction lot from all non-empty main-inventory slots. */
+    /** Validates a kit and opens a read-only confirmation menu before any item is removed. */
     public void sellKit(Player player, String rawPrice, boolean donate) {
+        sellKit(player, rawPrice, donate, "Набор");
+    }
+
+    public void sellKit(Player player, String rawPrice, boolean donate, String rawName) {
         MarketStorage targetRepository = donate ? donateRepository : repository;
         MarketSync targetSync = donate ? donateSync : sync;
         if (donate && (targetRepository == null || targetSync == null || playerPoints == null)) {
@@ -401,63 +434,147 @@ public final class PnMarketPlugin extends JavaPlugin {
         }
 
         int limit = listingLimit(player);
-        if (targetRepository.countActiveListings(player.getUniqueId()) >= limit) {
+        if (targetSync.activeCount(player.getUniqueId()) >= limit) {
             player.sendMessage(messages.message("error.listing-limit", Map.of("limit", limit)));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
         }
 
         ItemStack[] storage = player.getInventory().getStorageContents();
-        List<ItemStack> contents = new java.util.ArrayList<>();
-        for (ItemStack item : storage) {
+        Map<Integer, ItemStack> sourceSlots = new java.util.LinkedHashMap<>();
+        List<String> blockedMaterials = getConfig().getStringList("kits.blocked-materials").stream()
+                .map(value -> value.toUpperCase(Locale.ROOT))
+                .toList();
+        for (int slot = 0; slot < storage.length; slot++) {
+            ItemStack item = storage[slot];
             if (item == null || item.getType().isAir()) continue;
             if (MarketBundle.isBundle(this, item)) {
                 player.sendMessage("§cНельзя вложить аукционный набор в другой набор.");
                 return;
             }
-            contents.add(item.clone());
+            if (blockedMaterials.contains(item.getType().name())) {
+                player.sendMessage("§cПредмет §e" + ItemLocalization.getPlainName(item)
+                        + " §cзапрещён внутри наборов.");
+                return;
+            }
+            sourceSlots.put(slot, item.clone());
         }
-        if (contents.isEmpty()) {
+        if (sourceSlots.isEmpty()) {
             player.sendMessage("§cПоложите предметы набора в основной инвентарь.");
             return;
         }
 
-        int maxSlots = Math.max(1, Math.min(36, getConfig().getInt("kits.max-slots", 18)));
-        if (contents.size() > maxSlots) {
+        int maxSlots = kitSlotLimit(player);
+        if (sourceSlots.size() > maxSlots) {
             player.sendMessage("§cВ наборе может быть максимум §e" + maxSlots + "§c заполненных слотов.");
             return;
         }
 
-        ItemStack bundle;
+        List<ItemStack> contents = sourceSlots.values().stream().map(ItemStack::clone).toList();
+        int serializedSize;
         try {
-            bundle = MarketBundle.create(this, contents);
+            serializedSize = MarketBundle.serializedSize(contents);
         } catch (RuntimeException exception) {
             getLogger().warning("Не удалось подготовить набор: " + exception.getMessage());
             reject(player, "error.serialization");
             return;
         }
-
-        ItemStack[] originalStorage = new ItemStack[storage.length];
-        for (int index = 0; index < storage.length; index++) {
-            originalStorage[index] = storage[index] == null ? null : storage[index].clone();
-        }
-        player.getInventory().setStorageContents(new ItemStack[storage.length]);
-        try {
-            MarketListing listing = targetRepository.create(player.getUniqueId(), bundle, totalPrice,
-                    1, System.currentTimeMillis());
-            targetSync.listingCreated(listing);
-        } catch (IOException | RuntimeException exception) {
-            player.getInventory().setStorageContents(originalStorage);
-            getLogger().warning("Не удалось создать лот-набор: " + exception.getMessage());
-            reject(player, "error.serialization");
+        int maximumBytes = Math.max(4096, getConfig().getInt("kits.max-serialized-bytes", 131072));
+        if (serializedSize > maximumBytes) {
+            player.sendMessage("§cНабор содержит слишком много данных: §e" + serializedSize
+                    + "§c/§e" + maximumBytes + " §cбайт.");
             return;
         }
 
-        player.sendMessage(component(messages.message("notification.listed-prefix"))
-                .append(Component.text("Набор", NamedTextColor.YELLOW))
-                .append(component(messages.message("notification.price-separator")))
-                .append(component(formatPrice(donate, totalPrice, moneyFormat.format(totalPrice)))));
-        player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+        MarketGuiController controller = donate ? donateGui : gui;
+        if (controller == null) {
+            player.sendMessage("§cАукцион сейчас недоступен.");
+            return;
+        }
+        controller.openBundleCreatePreview(player, totalPrice, sanitizeKitName(rawName), sourceSlots, serializedSize);
+    }
+
+    public boolean confirmKitListing(Player player, boolean donate, String name, double totalPrice,
+                                     Map<Integer, ItemStack> sourceSlots) {
+        MarketStorage targetRepository = donate ? donateRepository : repository;
+        MarketSync targetSync = donate ? donateSync : sync;
+        if (targetRepository == null || targetSync == null) return false;
+        int limit = listingLimit(player);
+        if (!beginListing(player, donate, limit, targetSync)) {
+            player.sendMessage(messages.message("error.listing-limit", Map.of("limit", limit)));
+            return false;
+        }
+
+        ItemStack[] storage = player.getInventory().getStorageContents();
+        for (Map.Entry<Integer, ItemStack> entry : sourceSlots.entrySet()) {
+            int slot = entry.getKey();
+            if (slot < 0 || slot >= storage.length || storage[slot] == null
+                    || !storage[slot].equals(entry.getValue())) {
+                endListing(player.getUniqueId(), donate);
+                player.sendMessage("§cСодержимое инвентаря изменилось. Создайте предпросмотр набора заново.");
+                return false;
+            }
+        }
+
+        List<ItemStack> contents = sourceSlots.values().stream().map(ItemStack::clone).toList();
+        int maxSlots = kitSlotLimit(player);
+        if (contents.isEmpty() || contents.size() > maxSlots) {
+            endListing(player.getUniqueId(), donate);
+            player.sendMessage("§cВ наборе может быть максимум §e" + maxSlots + "§c заполненных слотов.");
+            return false;
+        }
+        List<String> blockedMaterials = getConfig().getStringList("kits.blocked-materials").stream()
+                .map(value -> value.toUpperCase(Locale.ROOT))
+                .toList();
+        for (ItemStack item : contents) {
+            if (MarketBundle.isBundle(this, item) || blockedMaterials.contains(item.getType().name())) {
+                endListing(player.getUniqueId(), donate);
+                player.sendMessage("§cСодержимое набора больше не проходит проверку.");
+                return false;
+            }
+        }
+        int maximumBytes = Math.max(4096, getConfig().getInt("kits.max-serialized-bytes", 131072));
+        try {
+            if (MarketBundle.serializedSize(contents) > maximumBytes) {
+                endListing(player.getUniqueId(), donate);
+                player.sendMessage("§cНабор превышает допустимый объём данных.");
+                return false;
+            }
+        } catch (RuntimeException exception) {
+            endListing(player.getUniqueId(), donate);
+            reject(player, "error.serialization");
+            return false;
+        }
+        ItemStack bundle;
+        try {
+            bundle = MarketBundle.create(this, contents, name);
+        } catch (RuntimeException exception) {
+            endListing(player.getUniqueId(), donate);
+            reject(player, "error.serialization");
+            return false;
+        }
+
+        for (Integer slot : sourceSlots.keySet()) storage[slot] = null;
+        player.getInventory().setStorageContents(storage);
+        UUID playerId = player.getUniqueId();
+        runStorageAsync(() -> targetRepository.create(playerId, bundle, totalPrice,
+                        1, System.currentTimeMillis()), listing -> {
+            endListing(playerId, donate);
+            targetSync.listingCreated(listing);
+            favoriteService.notifyListing(listing, donate);
+            player.sendMessage(component(messages.message("notification.listed-prefix"))
+                    .append(Component.text(name, NamedTextColor.YELLOW))
+                    .append(component(messages.message("notification.price-separator")))
+                    .append(component(formatPrice(donate, totalPrice, moneyFormat.format(totalPrice)))));
+            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
+            openAuction(player, donate);
+        }, exception -> {
+            endListing(playerId, donate);
+            restoreItems(player, contents);
+            getLogger().warning("Не удалось создать лот-набор: " + exception.getMessage());
+            reject(player, "error.serialization");
+        });
+        return true;
     }
 
     private boolean setupEconomy() {
@@ -562,6 +679,21 @@ public final class PnMarketPlugin extends JavaPlugin {
     }
 
     private int listingLimit(Player player) {
+        String group = primaryGroup(player);
+        int fallback = getConfig().getInt("limits.default", 3);
+        return Math.max(0, getConfig().getInt("limits." + group, fallback));
+    }
+
+    private int kitSlotLimit(Player player) {
+        String group = primaryGroup(player);
+        if (getConfig().isInt("kits.max-slots")) {
+            return Math.max(1, Math.min(36, getConfig().getInt("kits.max-slots", 10)));
+        }
+        int fallback = getConfig().getInt("kits.max-slots.default", 10);
+        return Math.max(1, Math.min(36, getConfig().getInt("kits.max-slots." + group, fallback)));
+    }
+
+    private String primaryGroup(Player player) {
         String group = "default";
         if (permission != null) {
             try {
@@ -573,8 +705,48 @@ public final class PnMarketPlugin extends JavaPlugin {
                 getLogger().warning("Не удалось определить группу игрока: " + exception.getMessage());
             }
         }
-        int fallback = getConfig().getInt("limits.default", 3);
-        return Math.max(0, getConfig().getInt("limits." + group, fallback));
+        return group;
+    }
+
+    private boolean beginListing(Player player, boolean donate, int limit, MarketSync targetSync) {
+        String key = player.getUniqueId() + ":" + donate;
+        if (targetSync.activeCount(player.getUniqueId()) >= limit) return false;
+        return pendingListings.add(key);
+    }
+
+    private void endListing(UUID playerId, boolean donate) {
+        pendingListings.remove(playerId + ":" + donate);
+    }
+
+    private <T> void runStorageAsync(Callable<T> operation, Consumer<T> success,
+                                     Consumer<Throwable> failure) {
+        getServer().getScheduler().runTaskAsynchronously(this, () -> {
+            T result;
+            try {
+                result = operation.call();
+            } catch (Throwable throwable) {
+                if (isEnabled()) getServer().getScheduler().runTask(this, () -> failure.accept(throwable));
+                return;
+            }
+            if (isEnabled()) getServer().getScheduler().runTask(this, () -> success.accept(result));
+        });
+    }
+
+    private void restoreItems(Player player, List<ItemStack> items) {
+        if (items == null || items.isEmpty()) return;
+        Map<Integer, ItemStack> overflow = player.getInventory().addItem(
+                items.stream().map(ItemStack::clone).toArray(ItemStack[]::new));
+        overflow.values().forEach(item ->
+                player.getWorld().dropItemNaturally(player.getLocation(), item));
+    }
+
+    private String sanitizeKitName(String rawName) {
+        String value = rawName == null ? "" : org.bukkit.ChatColor.stripColor(rawName);
+        if (value == null) value = "";
+        value = value.replaceAll("[\\r\\n\\t]", " ").trim().replaceAll("\\s{2,}", " ");
+        if (value.isEmpty()) value = "Набор";
+        if (value.length() > 32) value = value.substring(0, 32).trim();
+        return value;
     }
 
     private void reject(Player player, String messageKey) {
