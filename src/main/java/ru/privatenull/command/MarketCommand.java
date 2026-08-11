@@ -21,7 +21,7 @@ import java.util.Map;
 
 public final class MarketCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS =
-            List.of("sell", "kit", "notify", "search", "show", "help", "reload");
+            List.of("sell", "kit", "notify", "search", "show", "currency", "help", "reload");
 
     private final PnMarketPlugin plugin;
     private final boolean donate;
@@ -39,11 +39,13 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         if (args.length == 0) {
-            plugin.openAuction(player, donate);
+            if (donate) plugin.openAuction(player, true);
+            else plugin.openAuction(player, plugin.selectedCurrency(player));
             player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, 0.8f, 1.1f);
             return true;
         }
         return switch (args[0].toLowerCase(Locale.ROOT)) {
+            case "currency" -> currency(player, args);
             case "reload" -> {
                 if (donate) {
                     noPermission(player);
@@ -74,6 +76,10 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("search")) {
             return MarketSearch.tabComplete(plugin.activeListings(donate), args[1]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("currency")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            return plugin.currencies().keySet().stream().filter(id -> id.startsWith(prefix)).toList();
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("notify")) {
             String prefix = args[1].toLowerCase(Locale.ROOT);
@@ -132,6 +138,26 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
                 ? String.join(" ", java.util.Arrays.copyOfRange(args, 2, args.length))
                 : "Набор";
         plugin.sellKit(player, args[1], donate, name);
+        return true;
+    }
+
+    private boolean currency(Player player, String[] args) {
+        if (args.length < 2) {
+            player.sendMessage("§eДоступные валюты: §f" + String.join(", ", plugin.currencies().keySet()));
+            player.sendMessage("§7Использование: §f/" + (donate ? "dah" : "ah") + " currency <id>");
+            return true;
+        }
+        if (donate && !"playerpoints".equalsIgnoreCase(args[1])) {
+            player.sendMessage("§c/dah использует только PlayerPoints.");
+            return true;
+        }
+        if (!plugin.selectCurrency(player, args[1])) {
+            player.sendMessage(plugin.messages().message("error.currency-unavailable"));
+            return true;
+        }
+        player.sendMessage("§aВалюта рынка выбрана: §f" + args[1].toLowerCase(Locale.ROOT));
+        if (donate) plugin.openAuction(player, true);
+        else plugin.openAuction(player);
         return true;
     }
 
@@ -216,6 +242,7 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
         player.sendMessage("§8  ▸ §e" + root + " notify §8— §fизбранное и уведомления");
         player.sendMessage("§8  ▸ §e" + root + " search <название> §8— §fнайти лот");
         player.sendMessage("§8  ▸ §e" + root + " show <игрок> §8— §fпосмотреть товары игрока");
+        player.sendMessage("§8  ▸ §e" + root + " currency <id> §8— §fвыбрать валюту рынка");
         if (!donate && player.hasPermission("pnmarket.admin")) {
             player.sendMessage("§8  ▸ §e/ah reload §8— §fперезагрузить конфиг");
         }

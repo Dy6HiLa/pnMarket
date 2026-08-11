@@ -26,6 +26,6 @@ class MarketFilterTest {
 
     private MarketListing listing(String id, double unitPrice, int amount, long createdAt) {
         return new MarketListing(id, UUID.randomUUID(), null,
-                unitPrice, amount, createdAt, "ACTIVE");
+                "vault", unitPrice, amount, createdAt, "ACTIVE");
     }
 }

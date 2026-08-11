@@ -209,6 +209,15 @@ public final class MarketGuiController {
         return plugin.formatPrice(donateAuction, amount, formatMoney(amount));
     }
 
+    private MarketPayment paymentFor(MarketListing listing) {
+        MarketPayment selected = plugin.currencyPayment(listing.currencyId());
+        return selected != null && selected.isAvailable() ? selected : null;
+    }
+
+    private String formatPrice(MarketListing listing, double amount) {
+        return plugin.formatPrice(listing.currencyId(), amount);
+    }
+
     private String color(String s) {
         return ChatColor.translateAlternateColorCodes('&', s);
     }
@@ -331,7 +340,8 @@ public final class MarketGuiController {
         lore.add("");
         lore.add(messages.message("listing.info-title"));
         lore.add(messages.message("listing.seller", Map.of("seller", ownerName)));
-        lore.add(" §7- §fСтоимость: " + formatPrice(totalPrice));
+        lore.add(" §7- §fВалюта: §e" + listing.currencyId());
+        lore.add(" §7- §fСтоимость: " + formatPrice(listing, totalPrice));
         if (amountForLore > 1) {
             lore.add(messages.message("listing.amount", Map.of("amount", amountForLore)));
         }
@@ -363,8 +373,8 @@ public final class MarketGuiController {
         double minimum = prices.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
         double average = prices.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         lore.add("§x§D§5§B§F§F§F «Статистика цены за 1 шт.»");
-        lore.add(" §7- §fМинимальная: " + formatPrice(minimum));
-        lore.add(" §7- §fСредняя: " + formatPrice(average));
+        lore.add(" §7- §fМинимальная: " + formatPrice(listing, minimum));
+        lore.add(" §7- §fСредняя: " + formatPrice(listing, average));
         lore.add(" §7- §fЛотов в расчёте: §e" + prices.size());
         lore.add("");
     }
@@ -496,6 +506,11 @@ public final class MarketGuiController {
             String q = view.searchQuery.toLowerCase(Locale.ROOT);
             filtered.removeIf(l -> !MarketSearch.matches(l, q));
         }
+
+        Player viewer = Bukkit.getPlayer(view.viewer);
+        String currencyId = donateAuction ? "playerpoints"
+                : viewer == null ? "vault" : plugin.selectedCurrency(viewer);
+        filtered.removeIf(listing -> !currencyId.equalsIgnoreCase(listing.currencyId()));
 
         if (!view.isSearch && !MarketCategories.ALL.equals(view.category)) {
             filtered.removeIf(l -> !categories.categoryOf(l).equals(view.category));
@@ -1040,7 +1055,8 @@ public final class MarketGuiController {
                 " §7- §fНазвание: §e" + name,
                 " §7- §fПредметов: §e" + contents.size(),
                 " §7- §fРедкость: " + MarketBundle.rarity(contents).displayName(),
-                " §7- §fСтоимость: " + formatPrice(totalPrice),
+                " §7- §fСтоимость: " + plugin.formatPrice(
+                        donateAuction ? "playerpoints" : plugin.selectedCurrency(player), totalPrice),
                 "",
                 "§x§7§C§F§F§8§0➥ §fНажмите, чтобы выставить"
         ));
@@ -1413,7 +1429,8 @@ public final class MarketGuiController {
             return;
         }
         double totalPrice = fresh.pricePerUnit() * requestedAmount;
-        if (!payment.has(player, totalPrice)) {
+        MarketPayment listingPayment = paymentFor(fresh);
+        if (listingPayment == null || !listingPayment.has(player, totalPrice)) {
             player.sendMessage(messages.message("error.insufficient-funds"));
             player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, 0.8f, 0.8f);
             return;
@@ -1458,6 +1475,13 @@ public final class MarketGuiController {
         MarketListing fresh = reservation.listing();
         int toBuy = reservation.quantity();
         double totalPrice = fresh.pricePerUnit() * toBuy;
+        MarketPayment listingPayment = paymentFor(fresh);
+        if (listingPayment == null) {
+            rollbackReservationAsync(reservation);
+            pendingPurchases.remove(buyerId);
+            player.sendMessage(messages.message("error.currency-unavailable"));
+            return;
+        }
         List<ItemStack> delivery = deliveryItems(fresh, toBuy);
         if (!player.isOnline() || delivery.isEmpty() || !canFitAll(player, delivery)) {
             rollbackReservationAsync(reservation);
@@ -1468,7 +1492,7 @@ public final class MarketGuiController {
             }
             return;
         }
-        if (!payment.withdraw(player, totalPrice)) {
+        if (!listingPayment.withdraw(player, totalPrice)) {
             rollbackReservationAsync(reservation);
             pendingPurchases.remove(buyerId);
             player.sendMessage(messages.message("error.insufficient-funds"));
@@ -1476,8 +1500,8 @@ public final class MarketGuiController {
             return;
         }
         OfflinePlayer seller = Bukkit.getOfflinePlayer(fresh.sellerId());
-        if (!payment.deposit(seller, totalPrice)) {
-            payment.deposit(player, totalPrice);
+        if (!listingPayment.deposit(seller, totalPrice)) {
+            listingPayment.deposit(player, totalPrice);
             rollbackReservationAsync(reservation);
             pendingPurchases.remove(buyerId);
             player.sendMessage(messages.message("error.purchase-failed"));
@@ -1503,17 +1527,17 @@ public final class MarketGuiController {
                         .append(component(messages.message("notification.seller-sale-middle")))
                         .append(itemName.color(NamedTextColor.YELLOW))
                         .append(component(messages.message("notification.price-separator")))
-                        .append(component(formatPrice(totalPrice)));
+                        .append(component(formatPrice(fresh, totalPrice)));
                 sellerPlayer.sendMessage(sellerMessage);
                 sellerPlayer.playSound(sellerPlayer.getLocation(),
                         Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.4f);
-            } else plugin.queueSaleNotification(fresh.sellerId(), player.getName(), fresh.item(), totalPrice, donateAuction);
+            } else plugin.queueSaleNotification(fresh.sellerId(), player.getName(), fresh.item(), totalPrice, fresh.currencyId());
             giveItemsOrDrop(player, delivery);
             Component itemName = ItemLocalization.getNameComponent(fresh.item());
             player.sendMessage(component(messages.message("notification.purchased-prefix"))
                     .append(itemName.color(NamedTextColor.YELLOW))
                     .append(component(messages.message("notification.price-separator")))
-                    .append(component(formatPrice(totalPrice))));
+                    .append(component(formatPrice(fresh, totalPrice))));
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.25f);
             if (purchaseViews.get(buyerId) == pv) {
                 purchaseViews.remove(buyerId);
@@ -1521,8 +1545,8 @@ public final class MarketGuiController {
             }
         }, exception -> {
             pendingPurchases.remove(buyerId);
-            boolean sellerRolledBack = payment.withdraw(seller, totalPrice);
-            boolean buyerRefunded = payment.deposit(player, totalPrice);
+            boolean sellerRolledBack = listingPayment.withdraw(seller, totalPrice);
+            boolean buyerRefunded = listingPayment.deposit(player, totalPrice);
             rollbackReservationAsync(reservation);
             plugin.getLogger().severe("Не удалось завершить покупку " + fresh.id()
                     + "; rollback seller=" + sellerRolledBack + ", buyer=" + buyerRefunded
@@ -1762,7 +1786,8 @@ public final class MarketGuiController {
             return;
         }
         double minCost = listing.pricePerUnit();
-        if (!payment.has(player, minCost)) {
+        MarketPayment listingPayment = paymentFor(listing);
+        if (listingPayment == null || !listingPayment.has(player, minCost)) {
             player.sendMessage(messages.message("error.insufficient-funds"));
             showNoMoneyBarrier(player, view, slot, listing);
             return;

@@ -6,7 +6,7 @@ authors: [ privatenull ]
 description: pnMarket - AuctionPlugin
 website: https://github.com/Dy6HiLa/pnMarket
 depend: [Vault]
-softdepend: [PlayerPoints, ExcellentEconomy]
+softdepend: [PlayerPoints, ExcellentEconomy, PlaceholderAPI]
 commands:
   dah:
     description: Команда для открытия аукциона pnMarket

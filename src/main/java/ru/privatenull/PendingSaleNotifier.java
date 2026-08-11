@@ -26,10 +26,10 @@ final class PendingSaleNotifier implements Listener {
         this.data = YamlConfiguration.loadConfiguration(file);
     }
 
-    synchronized void queue(UUID seller, String buyer, ItemStack item, double amount, boolean donate) {
+    synchronized void queue(UUID seller, String buyer, ItemStack item, double amount, String currencyId) {
         String path = seller + ".sales";
         List<String> sales = new ArrayList<>(data.getStringList(path));
-        sales.add(buyer + "|" + ItemLocalization.getPlainName(item) + "|" + amount + "|" + donate);
+        sales.add(buyer + "|" + ItemLocalization.getPlainName(item) + "|" + amount + "|" + currencyId);
         data.set(path, sales);
         save();
     }
@@ -43,9 +43,15 @@ final class PendingSaleNotifier implements Listener {
         for (String sale : sales) {
             String[] parts = sale.split("\\|", 4);
             if (parts.length < 4) continue;
-            String currency = Boolean.parseBoolean(parts[3]) ? " PP" : "⛃";
-            player.sendMessage("§a[Аукцион] §7» §fПока вас не было, игрок §e@" + parts[0]
-                    + " §fкупил §e" + parts[1] + " §fза §a" + parts[2] + currency + "§f.");
+            try {
+                String currencyId = "true".equalsIgnoreCase(parts[3]) ? "playerpoints"
+                        : "false".equalsIgnoreCase(parts[3]) ? "vault" : parts[3];
+                player.sendMessage("§a[Аукцион] §7» §fПока вас не было, игрок §e@" + parts[0]
+                        + " §fкупил §e" + parts[1] + " §fза §a" + plugin.formatPrice(currencyId,
+                        Double.parseDouble(parts[2])) + "§f.");
+            } catch (NumberFormatException ignored) {
+                // Ignore malformed legacy notifications instead of breaking the join handler.
+            }
         }
         data.set(path, null);
         save();

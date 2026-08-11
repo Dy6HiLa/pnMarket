@@ -19,6 +19,7 @@ error:
   invalid-amount: "{prefix} &fНекорректное количество предметов."
   serialization: "{prefix} &fНе удалось сохранить предмет."
   player-not-found: "{prefix} &fИгрок не найден."
+  currency-unavailable: "{prefix} &cЭта валюта сейчас недоступна. Операция отменена без списания средств."
   listing-unavailable: "{prefix} &fЭтот лот уже недоступен."
   own-listing: "{prefix} &fНельзя купить собственный лот."
   insufficient-funds: "{prefix} &fНедостаточно средств."

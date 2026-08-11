@@ -43,7 +43,7 @@ public final class MarketRepository implements MarketStorage {
         this.logger = logger;
     }
 
-    public MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit,
+    public MarketListing create(UUID sellerId, ItemStack item, String currencyId, double pricePerUnit,
                                 int amount, long createdAt) throws IOException {
         String encodedItem = encodeItem(item);
         while (true) {
@@ -51,13 +51,14 @@ public final class MarketRepository implements MarketStorage {
             Document document = new Document("_id", id)
                     .append("seller", sellerId.toString())
                     .append("item", encodedItem)
+                    .append("currencyId", currencyId)
                     .append("pricePerUnit", pricePerUnit)
                     .append("amount", amount)
                     .append("createdAt", createdAt)
                     .append("status", "ACTIVE");
             try {
                 collection.insertOne(document);
-                return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, "ACTIVE");
+                return new MarketListing(id, sellerId, item.clone(), currencyId, pricePerUnit, amount, createdAt, "ACTIVE");
             } catch (MongoWriteException exception) {
                 if (exception.getError() != null && exception.getError().getCode() == 11000) continue;
                 throw exception;
@@ -180,13 +181,18 @@ public final class MarketRepository implements MarketStorage {
             String status = document.getString("status");
             if (status == null) status = "ACTIVE";
             long createdAt = rawCreatedAt.longValue();
+            String currencyId = document.getString("currencyId");
+            if (currencyId == null || currencyId.isBlank()) {
+                currencyId = "vault";
+                collection.updateOne(Filters.eq("_id", id), Updates.set("currencyId", currencyId));
+            }
             if ("ACTIVE".equalsIgnoreCase(status)
                     && System.currentTimeMillis() - createdAt >= expiryMillis) {
                 updateStatus(id, "EXPIRED");
                 status = "EXPIRED";
             }
             return Optional.of(new MarketListing(
-                    id, sellerId, item, rawPrice.doubleValue(), amount, createdAt, status
+                    id, sellerId, item, currencyId, rawPrice.doubleValue(), amount, createdAt, status
             ));
         } catch (IOException | IllegalArgumentException | ClassCastException exception) {
             logger.log(Level.WARNING, "Пропущен повреждённый лот MongoDB id=" + safeId(id)

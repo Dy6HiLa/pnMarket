@@ -34,9 +34,26 @@ auto-sell:
 currencies:
   vault:
     enabled: true
+    name: "Монеты"
     amount-placeholder: "%vault_eco_balance%"
     withdraw-command: ""
     deposit-command: ""
+    prefix: "&a{price}⛃"
+  playerpoints:
+    enabled: true
+    name: "Points"
+    amount-placeholder: "%playerpoints_points%"
+    withdraw-command: "points take {player} {amount}"
+    deposit-command: "points give {player} {amount}"
+    prefix: "&d{price} PP"
+  # Command currencies require PlaceholderAPI and both mutation commands. Invalid or unavailable currencies fail closed.
+  tokens:
+    enabled: false
+    name: "Токены"
+    amount-placeholder: "%mytokens_balance%"
+    withdraw-command: "tokens take {player} {amount}"
+    deposit-command: "tokens give {player} {amount}"
+    prefix: "&b{price} TOK"
 
 listing-price:
   # Цена за весь лот, не за одну единицу предмета. maximum: 0 отключает верхнюю границу.

@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface MarketStorage extends AutoCloseable {
-    MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit, int amount, long createdAt) throws IOException;
+    MarketListing create(UUID sellerId, ItemStack item, String currencyId, double pricePerUnit, int amount, long createdAt) throws IOException;
 
     List<MarketListing> findAll();
 
