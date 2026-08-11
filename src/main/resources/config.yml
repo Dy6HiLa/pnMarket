@@ -23,6 +23,21 @@ limits:
   default: 3
   gifest: 10
 
+listing-expiry:
+  # Срок жизни лота в часах. ExcellentEconomy может использоваться через Vault.
+  hours: 24
+  groups: {}
+
+auto-sell:
+  price-multiplier: 1.0
+
+currencies:
+  vault:
+    enabled: true
+    amount-placeholder: "%vault_eco_balance%"
+    withdraw-command: ""
+    deposit-command: ""
+
 listing-price:
   # Цена за весь лот, не за одну единицу предмета. maximum: 0 отключает верхнюю границу.
   minimum: 1

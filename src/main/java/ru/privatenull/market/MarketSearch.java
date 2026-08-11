@@ -43,6 +43,11 @@ public final class MarketSearch {
         if (listing == null || listing.item() == null) return false;
 
         String q = query.toLowerCase(Locale.ROOT);
+        Double price = parseCompactNumber(q);
+        if (price != null) {
+            double total = listing.pricePerUnit() * listing.amount();
+            if (Math.abs(total - price) < Math.max(0.01, price * 0.001)) return true;
+        }
 
         String name = extractName(listing);
         if (name != null && name.toLowerCase(Locale.ROOT).contains(q)) {
@@ -51,6 +56,20 @@ public final class MarketSearch {
 
         String mat = listing.item().getType().name().toLowerCase(Locale.ROOT);
         return mat.contains(q);
+    }
+
+    /** Accepts search prices such as 10k, 1kk and 1m. */
+    public static Double parseCompactNumber(String value) {
+        if (value == null) return null;
+        String normalized = value.trim().toLowerCase(Locale.ROOT).replace(',', '.');
+        try {
+            if (normalized.endsWith("kk")) return Double.parseDouble(normalized.substring(0, normalized.length() - 2)) * 1_000_000;
+            if (normalized.endsWith("k")) return Double.parseDouble(normalized.substring(0, normalized.length() - 1)) * 1_000;
+            if (normalized.endsWith("m")) return Double.parseDouble(normalized.substring(0, normalized.length() - 1)) * 1_000_000;
+            return Double.parseDouble(normalized);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     public static List<String> tabComplete(Collection<MarketListing> listings, String prefix) {

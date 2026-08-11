@@ -173,7 +173,12 @@ public final class MarketCommand implements CommandExecutor, TabCompleter {
 
     private boolean search(Player player, String[] args) {
         if (args.length < 2) {
-            usage(player, donate ? "/dah search <название>" : "/ah search <название>");
+            Material hand = player.getInventory().getItemInMainHand().getType();
+            if (hand.isAir()) {
+                usage(player, donate ? "/dah search <название>" : "/ah search <название>");
+                return true;
+            }
+            plugin.openAuctionSearch(player, hand.name(), donate);
             return true;
         }
         String query = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)).trim();

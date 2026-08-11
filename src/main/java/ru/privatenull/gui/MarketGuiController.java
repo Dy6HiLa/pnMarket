@@ -45,7 +45,6 @@ import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
 public final class MarketGuiController {
-    private static final long EXPIRY_MILLIS = 24L * 60L * 60L * 1000L;
 
     private static final int[] AUCTION_SLOTS = {
             10, 11, 12, 13, 14, 15, 16,
@@ -219,7 +218,7 @@ public final class MarketGuiController {
     }
 
     private String formatTimeRemaining(long createdAt) {
-        long left = createdAt + EXPIRY_MILLIS - System.currentTimeMillis();
+        long left = createdAt + plugin.listingExpiryMillis() - System.currentTimeMillis();
         if (left <= 0) return messages.message("time.empty");
         long minutes = left / 60000L;
         long hours = minutes / 60;
@@ -1508,7 +1507,7 @@ public final class MarketGuiController {
                 sellerPlayer.sendMessage(sellerMessage);
                 sellerPlayer.playSound(sellerPlayer.getLocation(),
                         Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.4f);
-            }
+            } else plugin.queueSaleNotification(fresh.sellerId(), player.getName(), fresh.item(), totalPrice, donateAuction);
             giveItemsOrDrop(player, delivery);
             Component itemName = ItemLocalization.getNameComponent(fresh.item());
             player.sendMessage(component(messages.message("notification.purchased-prefix"))

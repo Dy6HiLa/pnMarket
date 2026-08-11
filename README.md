@@ -251,3 +251,7 @@ plugins/pnMarket/
 ## Лицензия
 
 Распространяется по лицензии [MIT](LICENSE).
+# pnMarket
+
+Поддерживает `/ah search` по предмету в руке, компактные цены `10k`, `1kk`, `1m` и `/ah sell auto` с правом `pnmarket.sell.auto`.
+Срок лота задаётся параметром `listing-expiry.hours`. ExcellentEconomy подключается через его Vault-провайдер.

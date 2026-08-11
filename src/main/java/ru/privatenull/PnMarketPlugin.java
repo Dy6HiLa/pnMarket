@@ -54,7 +54,7 @@ public final class PnMarketPlugin extends JavaPlugin {
     public static final String SUPPORT_DISCORD = "https://discord.gg/rRbzq6cnc6";
     private static final String GITHUB_REPOSITORY = "Dy6HiLa/pnMarket";
     private static final int BSTATS_PLUGIN_ID = 32716;
-    private static final long EXPIRY_MILLIS = 24L * 60L * 60L * 1000L;
+    private PendingSaleNotifier saleNotifier;
 
     private final DecimalFormat moneyFormat = new DecimalFormat("#,##0");
     private MarketStorage repository;
@@ -79,6 +79,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         messages = new MessagesConfig(this);
         guiLabels = new GuiLabels(messages);
         LangRu.init(this);
+        saleNotifier = new PendingSaleNotifier(this);
 
         if (!setupEconomy()) {
             getLogger().severe("Vault не найден, плагин отключён.");
@@ -113,6 +114,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         donateCommand.setExecutor(new MarketCommand(this, true));
         donateCommand.setTabCompleter(new MarketCommand(this, true));
         getServer().getPluginManager().registerEvents(new MarketInventoryListener(this), this);
+        getServer().getPluginManager().registerEvents(saleNotifier, this);
 
         setupUpdateChecker();
         new Metrics(this, BSTATS_PLUGIN_ID);
@@ -254,6 +256,17 @@ public final class PnMarketPlugin extends JavaPlugin {
     }
 
     public void sell(Player player, String rawPrice) {
+        if (rawPrice.equalsIgnoreCase("auto")) {
+            if (!player.hasPermission("pnmarket.sell.auto")) {
+                reject(player, "command.no-permission");
+                return;
+            }
+            rawPrice = autoPrice(player);
+            if (rawPrice == null) {
+                player.sendMessage("§cНе удалось определить цену: нет похожих лотов.");
+                return;
+            }
+        }
         double totalPrice;
         try {
             totalPrice = Double.parseDouble(rawPrice.replace(',', '.'));
@@ -644,7 +657,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         String fileName = config.getString("storage.sqlite.file", "market.db");
         File databaseFile = new File(getDataFolder(), fileName);
         return new JdbcMarketRepository("org.sqlite.JDBC", "jdbc:sqlite:" + databaseFile.getAbsolutePath(),
-                null, null, EXPIRY_MILLIS, getLogger(), donate ? "pnmarket_donate_listings" : "pnmarket_listings");
+                null, null, expiryMillis(), getLogger(), donate ? "pnmarket_donate_listings" : "pnmarket_listings");
     }
 
     private MarketStorage createMySqlRepository(FileConfiguration config) {
@@ -662,7 +675,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         }
         return new JdbcMarketRepository("com.mysql.cj.jdbc.Driver", url,
                 config.getString("storage.mysql.username", "root"),
-                config.getString("storage.mysql.password", ""), EXPIRY_MILLIS, getLogger(),
+                config.getString("storage.mysql.password", ""), expiryMillis(), getLogger(),
                 donate ? "pnmarket_donate_listings" : "pnmarket_listings");
     }
 
@@ -675,7 +688,32 @@ public final class PnMarketPlugin extends JavaPlugin {
         if (uri == null || uri.isBlank()) uri = config.getString("storage.mongo.uri", "mongodb://localhost:27017");
         String collection = config.getString("storage.mongo.collection", "auction");
         return new MarketRepository(uri, config.getString("storage.mongo.database", "minecraft"),
-                donate ? collection + "_donate" : collection, EXPIRY_MILLIS, getLogger());
+                donate ? collection + "_donate" : collection, expiryMillis(), getLogger());
+    }
+
+    private long expiryMillis() {
+        double hours = getConfig().getDouble("listing-expiry.hours", 24.0);
+        return (long) (Math.max(0.1, hours) * 60L * 60L * 1000L);
+    }
+
+    public long listingExpiryMillis() {
+        return expiryMillis();
+    }
+
+    public void queueSaleNotification(UUID sellerId, String buyer, ItemStack item, double amount, boolean donate) {
+        if (saleNotifier != null) saleNotifier.queue(sellerId, buyer, item, amount, donate);
+    }
+
+    private String autoPrice(Player player) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getType().isAir()) return null;
+        List<MarketListing> matches = activeListings(false).stream()
+                .filter(listing -> listing.item().isSimilar(hand))
+                .toList();
+        if (matches.isEmpty()) return null;
+        double average = matches.stream().mapToDouble(MarketListing::pricePerUnit).average().orElse(0.0);
+        double multiplier = getConfig().getDouble("auto-sell.price-multiplier", 1.0);
+        return String.valueOf(Math.max(0.01, average * hand.getAmount() * multiplier));
     }
 
     private int listingLimit(Player player) {
