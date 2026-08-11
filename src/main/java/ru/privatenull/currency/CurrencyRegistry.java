@@ -22,6 +22,8 @@ public final class CurrencyRegistry {
             try {
                 CurrencyDefinition definition = new CurrencyDefinition(id,
                         section.getString(rawId + ".name", id),
+                        section.getString(rawId + ".provider", "command"),
+                        section.getString(rawId + ".external-id", id),
                         section.getString(rawId + ".amount-placeholder", ""),
                         section.getString(rawId + ".withdraw-command", ""),
                         section.getString(rawId + ".deposit-command", ""));

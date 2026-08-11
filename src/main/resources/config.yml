@@ -45,6 +45,12 @@ currencies:
     amount-placeholder: "%playerpoints_points%"
     withdraw-command: "points take {player} {amount}"
     deposit-command: "points give {player} {amount}"
+  excellent-coins:
+    enabled: false
+    provider: excellenteconomy
+    external-id: coins
+    name: "Excellent Coins"
+    prefix: "&6{price} coins"
     prefix: "&d{price} PP"
   # Command currencies require PlaceholderAPI and both mutation commands. Invalid or unavailable currencies fail closed.
   tokens:

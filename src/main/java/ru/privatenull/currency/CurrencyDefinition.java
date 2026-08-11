@@ -1,8 +1,8 @@
 package ru.privatenull.currency;
 
 /** Immutable configuration of one market currency. */
-public record CurrencyDefinition(String id, String name, String balancePlaceholder,
-                                  String withdrawCommand, String depositCommand) {
+public record CurrencyDefinition(String id, String name, String provider, String externalId,
+                                  String balancePlaceholder, String withdrawCommand, String depositCommand) {
     private static final java.util.regex.Pattern COMMAND_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{([^{}]+)}");
 
@@ -16,6 +16,11 @@ public record CurrencyDefinition(String id, String name, String balancePlacehold
         depositCommand = depositCommand == null ? "" : depositCommand.trim();
         validateCommand("withdraw-command", withdrawCommand);
         validateCommand("deposit-command", depositCommand);
+    }
+
+    public CurrencyDefinition(String id, String name, String balancePlaceholder,
+                              String withdrawCommand, String depositCommand) {
+        this(id, name, "command", id, balancePlaceholder, withdrawCommand, depositCommand);
     }
 
     private static void validateCommand(String field, String command) {

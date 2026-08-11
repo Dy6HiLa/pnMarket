@@ -174,6 +174,9 @@ public final class PnMarketPlugin extends JavaPlugin {
         if ("playerpoints".equals(definition.id()) && playerPoints != null) {
             return new PlayerPointsPayment(playerPoints);
         }
+        if ("excellenteconomy".equalsIgnoreCase(definition.provider())) {
+            return new ru.privatenull.currency.ExcellentEconomyPayment(definition.externalId());
+        }
         return new CommandPayment(this, definition);
     }
 
