@@ -10,6 +10,9 @@ import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import ru.privatenull.currency.CurrencyDefinition;
 
 class ResourceLocalizationTest {
     @Test
@@ -49,5 +52,30 @@ class ResourceLocalizationTest {
         assertTrue(config.getBoolean("price-statistics.enabled"));
         assertTrue(config.getInt("notifications.max-favorites") > 0);
         assertTrue(config.isConfigurationSection("categories.bundles"));
+    }
+
+    @Test
+    void configContainsCurrencyDefinitions() throws Exception {
+        var stream = getClass().getClassLoader().getResourceAsStream("config.yml");
+        assertNotNull(stream);
+        var config = YamlConfiguration.loadConfiguration(
+                new InputStreamReader(stream, StandardCharsets.UTF_8));
+        assertTrue(config.isConfigurationSection("currencies.vault"));
+        assertTrue(config.getBoolean("currencies.vault.enabled"));
+        assertNotNull(config.getString("currencies.vault.amount-placeholder"));
+        assertTrue(config.isConfigurationSection("currencies.playerpoints"));
+        assertTrue(config.getString("currencies.playerpoints.withdraw-command", "")
+                .contains("{amount}"));
+        assertTrue(config.getString("currencies.playerpoints.deposit-command", "")
+                .contains("{player}"));
+        assertTrue(!config.getBoolean("currencies.tokens.enabled"));
+    }
+
+    @Test
+    void commandCurrencyRejectsUnknownAndMalformedPlaceholders() {
+        assertThrows(IllegalArgumentException.class, () -> new CurrencyDefinition(
+                "tokens", "Tokens", "%tokens_balance%", "tokens take {player} {balance}", ""));
+        assertThrows(IllegalArgumentException.class, () -> new CurrencyDefinition(
+                "tokens", "Tokens", "%tokens_balance%", "tokens take {player} {amount", ""));
     }
 }

@@ -30,7 +30,16 @@ class MarketSnapshotTest {
         assertEquals(1, snapshot.all().size());
     }
 
+    @Test
+    void listingKeepsCurrencyAcrossStateChanges() {
+        MarketListing listing = new MarketListing("tokens", UUID.randomUUID(), null,
+                "Tokens", 2.5, 4, 1, "ACTIVE");
+        assertEquals("tokens", listing.currencyId());
+        assertEquals("tokens", listing.withAmount(2).currencyId());
+        assertEquals("tokens", listing.withStatus("RETURNED").currencyId());
+    }
+
     private MarketListing listing(String id, UUID seller, int amount, String status) {
-        return new MarketListing(id, seller, null, 10, amount, 1, status);
+        return new MarketListing(id, seller, null, "vault", 10, amount, 1, status);
     }
 }

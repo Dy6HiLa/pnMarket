@@ -55,20 +55,22 @@ public final class JdbcMarketRepository implements MarketStorage {
     }
 
     @Override
-    public synchronized MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit,
+    public synchronized MarketListing create(UUID sellerId, ItemStack item, String currencyId, double pricePerUnit,
                                               int amount, long createdAt) throws IOException {
         String id = UUID.randomUUID().toString();
-        String sql = "INSERT INTO " + tableName + " (id, seller, item, price_per_unit, amount, created_at, status) "
-                + "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')";
+        if (currencyId == null || currencyId.isBlank()) throw new IllegalArgumentException("currencyId is required");
+        String sql = "INSERT INTO " + tableName + " (id, seller, item, currency_id, price_per_unit, amount, created_at, status) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, id);
             statement.setString(2, sellerId.toString());
             statement.setString(3, encodeItem(item));
-            statement.setDouble(4, pricePerUnit);
-            statement.setInt(5, amount);
-            statement.setLong(6, createdAt);
+            statement.setString(4, currencyId);
+            statement.setDouble(5, pricePerUnit);
+            statement.setInt(6, amount);
+            statement.setLong(7, createdAt);
             statement.executeUpdate();
-            return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, "ACTIVE");
+            return new MarketListing(id, sellerId, item.clone(), currencyId, pricePerUnit, amount, createdAt, "ACTIVE");
         } catch (SQLException exception) {
             throw new IllegalStateException("Не удалось сохранить лот: " + exception.getMessage(), exception);
         }
@@ -167,10 +169,13 @@ public final class JdbcMarketRepository implements MarketStorage {
     private void createTable() throws SQLException {
         String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                 + "id VARCHAR(36) PRIMARY KEY, seller VARCHAR(36) NOT NULL, item TEXT NOT NULL, "
-                + "price_per_unit DOUBLE NOT NULL, amount INTEGER NOT NULL, created_at BIGINT NOT NULL, "
+                + "currency_id VARCHAR(32), price_per_unit DOUBLE NOT NULL, amount INTEGER NOT NULL, created_at BIGINT NOT NULL, "
                 + "status VARCHAR(16) NOT NULL)";
         try (Statement statement = connection.createStatement()) {
             statement.execute(sql);
+            try { statement.executeUpdate("ALTER TABLE " + tableName + " ADD COLUMN currency_id VARCHAR(32)"); }
+            catch (SQLException ignored) { }
+            statement.executeUpdate("UPDATE " + tableName + " SET currency_id = 'vault' WHERE currency_id IS NULL OR currency_id = ''");
         }
     }
 
@@ -191,13 +196,22 @@ public final class JdbcMarketRepository implements MarketStorage {
         try {
             String id = result.getString("id");
             String status = result.getString("status");
+            String currencyId = result.getString("currency_id");
+            if (currencyId == null || currencyId.isBlank()) {
+                currencyId = "vault";
+                try (PreparedStatement migration = connection.prepareStatement(
+                        "UPDATE " + tableName + " SET currency_id = 'vault' WHERE id = ?")) {
+                    migration.setString(1, id);
+                    migration.executeUpdate();
+                }
+            }
             long createdAt = result.getLong("created_at");
             if ("ACTIVE".equalsIgnoreCase(status) && System.currentTimeMillis() - createdAt >= expiryMillis) {
                 updateStatus(id, "EXPIRED");
                 status = "EXPIRED";
             }
             return Optional.of(new MarketListing(id, UUID.fromString(result.getString("seller")),
-                    decodeItem(result.getString("item")), result.getDouble("price_per_unit"),
+                    decodeItem(result.getString("item")), currencyId, result.getDouble("price_per_unit"),
                     result.getInt("amount"), createdAt, status));
         } catch (SQLException | IOException | IllegalArgumentException exception) {
             logger.log(Level.WARNING, "Пропущен повреждённый SQL-лот: " + exception.getMessage());

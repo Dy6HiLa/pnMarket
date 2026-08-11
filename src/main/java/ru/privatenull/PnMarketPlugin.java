@@ -23,6 +23,10 @@ import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.command.MarketCommand;
 import ru.privatenull.currency.PlayerPointsPayment;
 import ru.privatenull.currency.VaultPayment;
+import ru.privatenull.currency.CurrencyDefinition;
+import ru.privatenull.currency.CurrencyRegistry;
+import ru.privatenull.currency.CommandPayment;
+import ru.privatenull.currency.MarketPayment;
 import ru.privatenull.gui.MarketGuiController;
 import ru.privatenull.gui.MarketInventoryListener;
 import ru.privatenull.market.MarketBundle;
@@ -46,6 +50,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.Set;
+import java.util.Collections;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,7 +59,7 @@ public final class PnMarketPlugin extends JavaPlugin {
     public static final String SUPPORT_DISCORD = "https://discord.gg/rRbzq6cnc6";
     private static final String GITHUB_REPOSITORY = "Dy6HiLa/pnMarket";
     private static final int BSTATS_PLUGIN_ID = 32716;
-    private static final long EXPIRY_MILLIS = 24L * 60L * 60L * 1000L;
+    private PendingSaleNotifier saleNotifier;
 
     private final DecimalFormat moneyFormat = new DecimalFormat("#,##0");
     private MarketStorage repository;
@@ -72,6 +77,8 @@ public final class PnMarketPlugin extends JavaPlugin {
     private FavoriteService favoriteService;
     private UpdateChecker updateChecker;
     private final Set<String> pendingListings = ConcurrentHashMap.newKeySet();
+    private Map<String, CurrencyDefinition> currencies = Map.of();
+    private final Map<UUID, String> selectedCurrencies = new ConcurrentHashMap<>();
 
     @Override
     public void onEnable() {
@@ -79,6 +86,14 @@ public final class PnMarketPlugin extends JavaPlugin {
         messages = new MessagesConfig(this);
         guiLabels = new GuiLabels(messages);
         LangRu.init(this);
+        saleNotifier = new PendingSaleNotifier(this);
+        try {
+            currencies = CurrencyRegistry.load(this, getLogger());
+        } catch (IllegalArgumentException exception) {
+            getLogger().severe("Конфигурация валют невалидна: " + exception.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         if (!setupEconomy()) {
             getLogger().severe("Vault не найден, плагин отключён.");
@@ -113,6 +128,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         donateCommand.setExecutor(new MarketCommand(this, true));
         donateCommand.setTabCompleter(new MarketCommand(this, true));
         getServer().getPluginManager().registerEvents(new MarketInventoryListener(this), this);
+        getServer().getPluginManager().registerEvents(saleNotifier, this);
 
         setupUpdateChecker();
         new Metrics(this, BSTATS_PLUGIN_ID);
@@ -135,6 +151,48 @@ public final class PnMarketPlugin extends JavaPlugin {
         return messages;
     }
 
+    public Map<String, CurrencyDefinition> currencies() {
+        return Collections.unmodifiableMap(currencies);
+    }
+
+    public String selectedCurrency(Player player) {
+        return selectedCurrencies.getOrDefault(player.getUniqueId(), "vault");
+    }
+
+    public boolean selectCurrency(Player player, String id) {
+        String normalized = id == null ? "" : id.toLowerCase(Locale.ROOT);
+        MarketPayment selected = currencyPayment(normalized);
+        if (!currencies.containsKey(normalized) || selected == null || !selected.isAvailable()) return false;
+        selectedCurrencies.put(player.getUniqueId(), normalized);
+        return true;
+    }
+
+    public MarketPayment currencyPayment(String id) {
+        CurrencyDefinition definition = currencies.get(id == null ? "" : id.toLowerCase(Locale.ROOT));
+        if (definition == null) return null;
+        if ("vault".equals(definition.id())) return new VaultPayment(economy);
+        if ("playerpoints".equals(definition.id()) && playerPoints != null) {
+            return new PlayerPointsPayment(playerPoints);
+        }
+        if ("excellenteconomy".equalsIgnoreCase(definition.provider())) {
+            return new ru.privatenull.currency.ExcellentEconomyPayment(definition.externalId());
+        }
+        return new CommandPayment(this, definition);
+    }
+
+    public boolean supportsListingCurrency(String id) {
+        MarketPayment payment = currencyPayment(id);
+        return payment != null && payment.isAvailable();
+    }
+
+    public void openAuction(Player player, String currencyId) {
+        if (!selectCurrency(player, currencyId)) {
+            player.sendMessage(messages.message("error.currency-unavailable"));
+            return;
+        }
+        openAuction(player);
+    }
+
     public MarketSync marketSync() {
         return sync;
     }
@@ -151,6 +209,12 @@ public final class PnMarketPlugin extends JavaPlugin {
         reloadConfig();
         messages.reload();
         LangRu.init(this);
+        try {
+            currencies = CurrencyRegistry.load(this, getLogger());
+        } catch (IllegalArgumentException exception) {
+            getLogger().warning("Конфигурация валют не перезагружена: " + exception.getMessage()
+                    + ". Оставлены предыдущие безопасные настройки. Support: " + SUPPORT_DISCORD);
+        }
         categories = MarketCategories.load(getConfig(), getLogger());
         if (gui != null) gui.shutdown();
         if (donateGui != null) donateGui.shutdown();
@@ -246,6 +310,14 @@ public final class PnMarketPlugin extends JavaPlugin {
         return ColorUtil.colorize(template.replace("{price}", formattedAmount));
     }
 
+    public String formatPrice(String currencyId, double amount) {
+        MarketPayment payment = currencyPayment(currencyId);
+        if (payment == null || !payment.isAvailable()) return "";
+        String configured = getConfig().getString("currencies." + currencyId + ".prefix", "&e{price} "
+                + getConfig().getString("currencies." + currencyId + ".name", currencyId));
+        return ColorUtil.colorize(configured.replace("{price}", payment.format(amount)));
+    }
+
     private void setupUpdateChecker() {
         updateChecker = new UpdateChecker(this, new UpdateSettings(
                 true, GITHUB_REPOSITORY, "pnmarket.admin", 6L, SUPPORT_DISCORD
@@ -254,6 +326,23 @@ public final class PnMarketPlugin extends JavaPlugin {
     }
 
     public void sell(Player player, String rawPrice) {
+        if (rawPrice.equalsIgnoreCase("auto")) {
+            if (!player.hasPermission("pnmarket.sell.auto")) {
+                reject(player, "command.no-permission");
+                return;
+            }
+            rawPrice = autoPrice(player);
+            if (rawPrice == null) {
+                player.sendMessage("§cНе удалось определить цену: нет похожих лотов.");
+                return;
+            }
+        }
+        String currencyId = selectedCurrency(player);
+        MarketPayment selectedPayment = currencyPayment(currencyId);
+        if (selectedPayment == null || !selectedPayment.isAvailable()) {
+            player.sendMessage(messages.message("error.currency-unavailable"));
+            return;
+        }
         double totalPrice;
         try {
             totalPrice = Double.parseDouble(rawPrice.replace(',', '.'));
@@ -269,12 +358,12 @@ public final class PnMarketPlugin extends JavaPlugin {
         double maximumPrice = getConfig().getDouble("listing-price.maximum", 0.0);
         if (totalPrice < minimumPrice) {
             player.sendMessage(messages.message("error.price-too-low", Map.of("price",
-                    formatPrice(false, minimumPrice, moneyFormat.format(minimumPrice)))));
+                    formatPrice(currencyId, minimumPrice))));
             return;
         }
         if (maximumPrice > 0.0 && totalPrice > maximumPrice) {
             player.sendMessage(messages.message("error.price-too-high", Map.of("price",
-                    formatPrice(false, maximumPrice, moneyFormat.format(maximumPrice)))));
+                    formatPrice(currencyId, maximumPrice))));
             return;
         }
         int limit = listingLimit(player);
@@ -298,7 +387,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         ItemStack storedItem = hand.clone();
         player.getInventory().setItemInMainHand(null);
         UUID playerId = player.getUniqueId();
-        runStorageAsync(() -> repository.create(playerId, storedItem, totalPrice / amount,
+        runStorageAsync(() -> repository.create(playerId, storedItem, currencyId, totalPrice / amount,
                         amount, System.currentTimeMillis()), listing -> {
             endListing(playerId, false);
             sync.listingCreated(listing);
@@ -307,7 +396,7 @@ public final class PnMarketPlugin extends JavaPlugin {
             player.sendMessage(component(messages.message("notification.listed-prefix"))
                     .append(itemName.color(NamedTextColor.YELLOW))
                     .append(component(messages.message("notification.price-separator")))
-                    .append(component(formatPrice(false, totalPrice, moneyFormat.format(totalPrice)))));
+                    .append(component(formatPrice(currencyId, totalPrice))));
             player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.3f);
         }, exception -> {
             endListing(playerId, false);
@@ -370,7 +459,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         ItemStack storedItem = hand.clone();
         player.getInventory().setItemInMainHand(null);
         UUID playerId = player.getUniqueId();
-        runStorageAsync(() -> donateRepository.create(playerId, storedItem, totalPrice / amount,
+        runStorageAsync(() -> donateRepository.create(playerId, storedItem, "playerpoints", totalPrice / amount,
                         amount, System.currentTimeMillis()), listing -> {
             endListing(playerId, true);
             donateSync.listingCreated(listing);
@@ -557,7 +646,8 @@ public final class PnMarketPlugin extends JavaPlugin {
         for (Integer slot : sourceSlots.keySet()) storage[slot] = null;
         player.getInventory().setStorageContents(storage);
         UUID playerId = player.getUniqueId();
-        runStorageAsync(() -> targetRepository.create(playerId, bundle, totalPrice,
+        String currencyId = donate ? "playerpoints" : selectedCurrency(player);
+        runStorageAsync(() -> targetRepository.create(playerId, bundle, currencyId, totalPrice,
                         1, System.currentTimeMillis()), listing -> {
             endListing(playerId, donate);
             targetSync.listingCreated(listing);
@@ -644,7 +734,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         String fileName = config.getString("storage.sqlite.file", "market.db");
         File databaseFile = new File(getDataFolder(), fileName);
         return new JdbcMarketRepository("org.sqlite.JDBC", "jdbc:sqlite:" + databaseFile.getAbsolutePath(),
-                null, null, EXPIRY_MILLIS, getLogger(), donate ? "pnmarket_donate_listings" : "pnmarket_listings");
+                null, null, expiryMillis(), getLogger(), donate ? "pnmarket_donate_listings" : "pnmarket_listings");
     }
 
     private MarketStorage createMySqlRepository(FileConfiguration config) {
@@ -662,7 +752,7 @@ public final class PnMarketPlugin extends JavaPlugin {
         }
         return new JdbcMarketRepository("com.mysql.cj.jdbc.Driver", url,
                 config.getString("storage.mysql.username", "root"),
-                config.getString("storage.mysql.password", ""), EXPIRY_MILLIS, getLogger(),
+                config.getString("storage.mysql.password", ""), expiryMillis(), getLogger(),
                 donate ? "pnmarket_donate_listings" : "pnmarket_listings");
     }
 
@@ -675,7 +765,32 @@ public final class PnMarketPlugin extends JavaPlugin {
         if (uri == null || uri.isBlank()) uri = config.getString("storage.mongo.uri", "mongodb://localhost:27017");
         String collection = config.getString("storage.mongo.collection", "auction");
         return new MarketRepository(uri, config.getString("storage.mongo.database", "minecraft"),
-                donate ? collection + "_donate" : collection, EXPIRY_MILLIS, getLogger());
+                donate ? collection + "_donate" : collection, expiryMillis(), getLogger());
+    }
+
+    private long expiryMillis() {
+        double hours = getConfig().getDouble("listing-expiry.hours", 24.0);
+        return (long) (Math.max(0.1, hours) * 60L * 60L * 1000L);
+    }
+
+    public long listingExpiryMillis() {
+        return expiryMillis();
+    }
+
+    public void queueSaleNotification(UUID sellerId, String buyer, ItemStack item, double amount, String currencyId) {
+        if (saleNotifier != null) saleNotifier.queue(sellerId, buyer, item, amount, currencyId);
+    }
+
+    private String autoPrice(Player player) {
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getType().isAir()) return null;
+        List<MarketListing> matches = activeListings(false).stream()
+                .filter(listing -> listing.item().isSimilar(hand))
+                .toList();
+        if (matches.isEmpty()) return null;
+        double average = matches.stream().mapToDouble(MarketListing::pricePerUnit).average().orElse(0.0);
+        double multiplier = getConfig().getDouble("auto-sell.price-multiplier", 1.0);
+        return String.valueOf(Math.max(0.01, average * hand.getAmount() * multiplier));
     }
 
     private int listingLimit(Player player) {

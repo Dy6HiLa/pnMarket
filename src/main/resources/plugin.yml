@@ -6,7 +6,7 @@ authors: [ privatenull ]
 description: pnMarket - AuctionPlugin
 website: https://github.com/Dy6HiLa/pnMarket
 depend: [Vault]
-softdepend: [PlayerPoints]
+softdepend: [PlayerPoints, ExcellentEconomy, PlaceholderAPI]
 commands:
   dah:
     description: Команда для открытия аукциона pnMarket
@@ -16,3 +16,6 @@ permissions:
   pnmarket.admin:
     description: Получать уведомления об обновлениях pnMarket
     default: op
+  pnmarket.sell.auto:
+    description: Разрешает автоматическую цену при /ah sell auto
+    default: false
