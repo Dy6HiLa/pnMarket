@@ -36,13 +36,4 @@ public final class VaultPayment implements MarketPayment {
         return economy != null && economy.depositPlayer(player, amount).transactionSuccess();
     }
 
-    @Override
-    public String format(double amount) {
-        return economy == null ? String.valueOf(amount) : economy.format(amount);
-    }
-
-    @Override
-    public String suffix() {
-        return "⛃";
-    }
 }

@@ -1,253 +1,204 @@
 # pnMarket
 
 <p align="center">
-  Аукцион для Minecraft-серверов на Paper 1.17–1.21.x.
-  <br>
-  GUI рынка, частичная покупка, поиск, собственные категории и SQLite по умолчанию.
-  <br>
-  Paper 1.16.5 поддерживается в экспериментальном режиме.
+  Современный GUI-аукцион для Minecraft-серверов Paper.<br>
+  Несколько валют, уведомления о товарах, комиссии, наборы и полностью настраиваемый интерфейс.
 </p>
 
 <p align="center">
-  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest">
-    <img src="https://img.shields.io/badge/Скачать-v1.0.2-429F91?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.2">
-  </a>
-  <a href="https://github.com/Dy6HiLa/pnMarket/releases">
-    <img src="https://img.shields.io/badge/Releases-GitHub-5A8DEE?style=for-the-badge&labelColor=17241F" alt="GitHub Releases">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-17241F?style=for-the-badge" alt="MIT">
-  </a>
+  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.0.3-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.3"></a>
+  <a href="https://discord.gg/SZxPP9surw"><img src="https://img.shields.io/badge/Discord-Поддержка-5865F2?style=for-the-badge&labelColor=17241F" alt="Discord"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-17241F?style=for-the-badge" alt="MIT"></a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Paper-1.17--1.21.x-5A8DEE?style=for-the-badge" alt="Paper 1.17–1.21.x">
-  <img src="https://img.shields.io/badge/1.16.5-Experimental-D8A657?style=for-the-badge" alt="1.16.5 experimental">
-  <img src="https://img.shields.io/badge/Java-17%2B-ED8B00?style=for-the-badge" alt="Java 17+">
-  <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB-429F91?style=for-the-badge" alt="SQLite, MySQL и MongoDB">
+  <img src="https://img.shields.io/badge/Paper-1.16.5--1.21.x-5A8DEE?style=flat-square" alt="Paper 1.16.5–1.21.x">
+  <img src="https://img.shields.io/badge/Java-17%2B-ED8B00?style=flat-square" alt="Java 17+">
+  <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB-429F91?style=flat-square" alt="SQLite, MySQL и MongoDB">
+  <img src="https://img.shields.io/badge/Economy-Vault%20%7C%20PlayerPoints%20%7C%20ExcellentEconomy-D66CFF?style=flat-square" alt="Поддерживаемые экономики">
 </p>
 
 <p align="center">
-  <a href="#features">Возможности</a>
-  · <a href="#installation">Установка</a>
-  · <a href="#commands">Команды</a>
-  · <a href="#configuration">Настройка</a>
-  · <a href="#storage">Базы данных</a>
-  · <a href="#support">Поддержка</a>
+  <a href="#возможности">Возможности</a> ·
+  <a href="#скриншоты">Скриншоты</a> ·
+  <a href="#команды">Команды</a> ·
+  <a href="#настройка">Настройка</a> ·
+  <a href="#установка">Установка</a>
 </p>
 
 ---
 
-<a id="features"></a>
 ## Возможности
 
-| Возможность | Как работает |
+| Раздел | Возможности |
 | --- | --- |
-| Графический аукцион | Открывается командой `/ah`, поддерживает страницы, сортировку и категории. |
-| Продажа предметов | `/ah sell <цена>` выставляет весь стак из основной руки. Цена указывается за весь лот. |
-| Частичная покупка | Покупатель выбирает количество предметов в лоте, цена пересчитывается автоматически. |
-| Мгновенное GUI-обновление | Новый лот, покупка, возврат и забор предмета обновляют все открытые меню в следующем тике сервера. |
-| Поиск и товары продавца | Поиск по названию и Material ID; просмотр всех активных лотов игрока. |
-| Собственные категории | Любое число категорий с правилами по Material ID, части ID, названию и съедобности. |
-| Защита лотов | Нельзя купить свой лот. Операции покупки резервируют предметы в БД, поэтому один предмет не продаётся дважды. |
-| Возврат и срок лота | Лоты истекают через 24 часа; свои активные лоты можно снять, а истёкшие забрать в «Мои товары». |
-| Лимиты и цены | Лимиты лотов зависят от основной Vault-группы. Минимальная и максимальная цена настраиваются. |
-| Три хранилища | SQLite без отдельного сервера, а также MySQL и MongoDB. |
-| Обновления | Проверка GitHub Releases запускается автоматически раз в шесть часов. |
+| Аукцион | Страницы, категории, сортировка, поиск, просмотр продавца и частичная покупка стака. |
+| Продажа | Обычные лоты, наборы предметов, автоматическая оценка `/ah sell auto` и перевыставление истёкших товаров. |
+| Уведомления | GUI-каталог всех предметов, уведомления о новых лотах и снижении цены, доставка сообщений после входа на сервер. |
+| Зачарования | Один профиль может требовать несколько совместимых чар нужного уровня на одном предмете. |
+| Зелья | Обычные, усиленные, длительные, взрывные и туманные зелья, а также стрелы со всеми эффектами. |
+| Валюты | Независимая настройка `/ah` и `/dah` через Vault, PlayerPoints или ExcellentEconomy. |
+| Цены | Полный и сокращённый формат чисел: `K`, `M`, `B`, `T`, `Q`. |
+| Комиссии | Отдельный процент за выставление и продажу, включая скидки для групп привилегий. |
+| Интерфейс | Плавные анимации, русская локализация, настраиваемые материалы, текстуры, lore и расположение слотов. |
+| Хранилище | SQLite без отдельного сервера, MySQL и MongoDB. |
 
-## Как работает рынок
+## Скриншоты
 
-1. Продавец держит предмет в основной руке и выполняет `/ah sell 250`.
-2. Плагин сохраняет предмет и цену в выбранную БД, забирает предмет из руки и сразу показывает лот всем игрокам с открытым аукционом.
-3. Покупатель открывает лот, выбирает количество и подтверждает покупку.
-4. Деньги списываются через Vault, продавец получает оплату, а предмет отправляется покупателю. Если инвентарь заполнен, предмет выпадает рядом с ним.
-5. После продажи все открытые меню синхронно отображают остаток лота либо удаляют проданный лот.
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Каталог предметов</strong><br><br>
+      <img src="docs/screenshots/notification-catalog.png" alt="Каталог предметов pnMarket" width="100%">
+    </td>
+    <td align="center" width="50%">
+      <strong>Выбор категории</strong><br><br>
+      <img src="docs/screenshots/notification-categories.png" alt="Категории уведомлений pnMarket" width="100%">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <strong>Управление уведомлениями</strong><br><br>
+      <img src="docs/screenshots/notification-menu-lore.png" alt="Описание меню уведомлений pnMarket" height="210">
+    </td>
+    <td align="center" width="50%">
+      <strong>Описание категории</strong><br><br>
+      <img src="docs/screenshots/notification-category-lore.png" alt="Описание категории pnMarket" height="210">
+    </td>
+  </tr>
+</table>
 
-<a id="installation"></a>
-## Установка
+## Каталог уведомлений
 
-1. Скачайте [`pnMarket-1.0.2.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest) из GitHub Release.
-2. Поместите файл в папку сервера `plugins/`.
-3. Установите [Vault](https://www.spigotmc.org/resources/vault.34315/) и совместимый плагин экономики. Для донат-аукциона `/dah` дополнительно установите PlayerPoints.
-4. Запустите сервер. По умолчанию будет создана SQLite-база `plugins/pnMarket/market.db`.
-5. При необходимости измените `plugins/pnMarket/config.yml` и выполните полный перезапуск сервера.
+- Откройте каталог командой `/ah notify` или кнопкой «Избранное и уведомления».
+- Нажмите ЛКМ по предмету, чтобы получать сообщения обо всех новых лотах этого типа.
+- Нажмите ПКМ, чтобы выбрать обязательные зачарования и минимальные уровни.
+- Все выбранные чары должны одновременно находиться на одном продаваемом предмете.
+- Несовместимые зачарования нельзя объединить в один профиль.
+- Активные профили можно просмотреть и удалить в отдельном меню.
 
-**Требования:** Paper 1.17–1.21.x, Java 17 или новее, Vault и плагин экономики. PlayerPoints требуется только для `/dah`. Для MySQL и MongoDB нужен доступный внешний сервер БД.
-
-> Paper 1.16.5 доступен как экспериментальный режим. Базовый аукцион и GUI запускаются на этой версии, но совместимость ещё тестируется. Если встретили ошибку на 1.16.5, напишите в [Discord-поддержку](https://discord.gg/rRbzq6cnc6), приложив версию Paper, Java и полный текст ошибки из консоли.
-
-Не используйте PlugMan и аналоги для первой установки или смены типа БД. Выполняйте полный рестарт сервера.
-
-<a id="commands"></a>
-## Команды и права
+## Команды
 
 | Команда | Описание |
 | --- | --- |
-| `/ah` | Открыть аукцион. |
+| `/ah` | Открыть обычный аукцион. |
+| `/dah` | Открыть донат-аукцион. |
 | `/ah sell <цена>` | Выставить предмет из основной руки. |
-| `/ah kit <цена> [название]` | Открыть предпросмотр и выставить набор из занятых слотов основного инвентаря. |
-| `/ah notify` | Открыть избранное обычного аукциона. |
-| `/ah notify material <материал>` | Добавить уведомление по Bukkit ID или русскому названию материала. |
-| `/ah notify name <название>` | Добавить уведомление по части названия. |
-| `/ah search <название>` | Открыть результаты поиска. |
-| `/ah show <игрок>` | Открыть лоты игрока. |
-| `/ah reload` | Перезагрузить `config.yml`, `messages.yml`, категории и проверку обновлений. |
-| `/dah` | Открыть донат-аукцион за PlayerPoints. |
-| `/dah sell <цена>` | Выставить предмет в донат-аукционе. |
-| `/dah kit <цена> [название]` | Открыть предпросмотр и выставить набор в донат-аукционе. |
-| `/dah notify` | Открыть отдельное избранное донат-аукциона. |
-| `/dah search <название>` | Найти лот в донат-аукционе. |
-| `/dah show <игрок>` | Открыть донат-лоты игрока. |
+| `/ah sell auto` | Рассчитать цену по похожим активным лотам. |
+| `/ah kit <цена> [название]` | Создать лот-набор из предметов основного инвентаря. |
+| `/ah notify` | Открыть каталог уведомлений. |
+| `/ah search [название]` | Найти товар; без названия используется предмет в руке. |
+| `/ah show <игрок>` | Посмотреть активные товары игрока. |
+| `/pnmarket` | Показать информацию о плагине и обновлении. |
+| `/pnmarket reload` | Перезагрузить конфигурацию. |
+| `/pnmarket machine` | Открыть редактор разметки GUI. |
+
+Для донат-аукциона команды `sell`, `sell auto`, `kit`, `notify`, `search` и `show` аналогично доступны через `/dah`.
 
 | Право | Назначение |
 | --- | --- |
-| `pnmarket.admin` | `/ah reload`, уведомления о версиях и статистика цен в описании лотов. |
+| `pnmarket.admin` | Панель администратора, перезагрузка, Machine и уведомления об обновлении. |
+| `pnmarket.sell.auto` | Автоматическая оценка через `sell auto`. |
 
-<a id="configuration"></a>
 ## Настройка
 
-### Лимиты лотов
+### Валюты
 
-`limits.default` определяет, сколько **активных** лотов может выставить обычный игрок. Если Vault отдаёт игроку основную группу, одноимённый ключ переопределяет этот лимит.
+Обычный и донат-аукцион включаются и настраиваются независимо.
 
 ```yml
-limits:
-  default: 3 # Все игроки без отдельного правила.
-  vip: 10    # Основная Vault-группа vip.
-  admin: 50  # Основная Vault-группа admin.
+currency:
+  default:
+    enabled: true
+    type: vault # vault, playerpoints или excellent
+    format: "&a{amount}⛃"
+    excellent-id: coins
+  donate:
+    enabled: true
+    type: playerpoints
+    format: "&d{amount} PP"
+    excellent-id: points
 ```
 
-### Ограничения цены
-
-Цена относится ко всему лоту, а не к одной единице предмета. `maximum: 0` отключает верхний предел.
+### Формат и ограничения цены
 
 ```yml
-listing-price:
-  minimum: 10
-  maximum: 1000000
+price:
+  mode: short # short: 1M, full: 1000000
+  short:
+    decimals: 1
+    thousand: K
+    million: M
+    billion: B
+    trillion: T
+    quadrillion: Q
+  limits:
+    default: { min: 1, max: "1M" }
+    donate: { min: 1, max: "1M" }
 ```
 
-### Наборы, статистика и уведомления
-
-Лимит набора определяется основной Vault-группой. Перед выставлением игрок видит
-содержимое, название, редкость, цену и объём данных; предметы забираются только
-после подтверждения.
+### Сроки и лимиты лотов
 
 ```yml
-kits:
-  max-slots:
-    default: 10
-    vip: 15
-    admin: 36
-  max-serialized-bytes: 131072
-  blocked-materials: [BEDROCK, BARRIER, COMMAND_BLOCK]
+sell:
+  limits:
+    default: 3
+    vip: 10
+  expiration:
+    default: 24h
+    groups:
+      default: 24h
+      vip: 48h
+      admin: 7d
+```
 
-price-statistics:
+### Комиссии
+
+```yml
+commission:
   enabled: true
-  permission: "pnmarket.admin"
-  minimum-samples: 1
-
-notifications:
-  enabled: true
-  max-favorites: 10
+  groups:
+    default: { listing: 2.0, sale: 5.0 }
+    vip: { listing: 1.0, sale: 3.0 }
+    premium: { listing: 0.0, sale: 1.0 }
 ```
 
-### Собственные категории
-
-Категории отображаются в порядке из `config.yml`. Первый подходящий фильтр определяет категорию товара. `all` встроена всегда и показывает все лоты.
-
-| Правило | Описание |
-| --- | --- |
-| `materials` | Точные значения Bukkit Material, например `STONE` или `DIAMOND_SWORD`. |
-| `material-contains` | Фрагменты Material ID, например `_PICKAXE`. |
-| `name-contains` | Фрагменты пользовательского названия предмета без цветовых кодов. |
-| `edible` | Все съедобные предметы. |
-
-```yml
-categories:
-  building:
-    name: "Строительство"
-    materials: ["STONE", "OAK_PLANKS", "GLASS"]
-  tools:
-    name: "Инструменты"
-    material-contains: ["_PICKAXE", "_SHOVEL", "_HOE"]
-  rare-items:
-    name: "Редкие предметы"
-    name-contains: ["легендар", "rare"]
-  food:
-    name: "Еда"
-    edible: true
-```
-
-После изменения категорий выполните `/ah reload` или перезапустите сервер.
-
-<a id="storage"></a>
-## Базы данных
-
-### SQLite
-
-Работает сразу после установки и не требует отдельного сервера.
-
-```yml
-storage:
-  type: sqlite
-  sqlite:
-    file: "market.db"
-```
-
-### MySQL
-
-```yml
-storage:
-  type: mysql
-  mysql:
-    host: "localhost"
-    port: 3306
-    database: "minecraft"
-    username: "pnmarket"
-    password: "change-me"
-```
-
-Можно использовать полный JDBC-адрес в `storage.mysql.url`.
-
-### MongoDB
-
-```yml
-storage:
-  type: mongodb
-  mongo:
-    uri: "mongodb://localhost:27017"
-    database: "minecraft"
-    collection: "auction"
-```
-
-Переменная окружения `PNMARKET_MONGO_URI` имеет приоритет над `storage.mongo.uri`. Не храните production-пароли в публичном репозитории.
-
-## Файлы плагина
+### Файлы
 
 ```text
 plugins/pnMarket/
-├── config.yml       # БД, лимиты, цены, категории
-├── messages.yml     # Сообщения и названия GUI
-├── lang/ru_ru.json  # Русские названия предметов
-└── market.db        # Создаётся только при SQLite
+├── config.yml
+├── gui.yml
+├── messages.yml
+├── favorites.yml
+├── pending-notifications.yml
+├── lang/ru_ru.json
+└── market.db
 ```
 
-## Сборка из исходников
+## Установка
+
+1. Скачайте [`pnMarket-1.0.3.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest).
+2. Поместите JAR в папку `plugins/`.
+3. Установите выбранный плагин экономики и его зависимости: Vault, PlayerPoints или ExcellentEconomy.
+4. Запустите сервер и настройте `config.yml`, `gui.yml` и `messages.yml`.
+5. Выполните полный перезапуск сервера. Не используйте PlugMan для первой установки или смены хранилища.
+
+Требования: Paper 1.16.5–1.21.x и Java 17 или новее.
+
+## Сборка
 
 ```powershell
-./gradlew.bat clean test releaseJar
+./gradlew.bat --no-daemon shadowJar
 ```
 
-Готовый файл появится по пути `release/pnMarket-1.0.2.jar`. В `build/libs/` также создаётся обычный JAR для разработки.
+Готовый файл: `build/libs/pnMarket-1.0.3.jar`.
 
-<a id="support"></a>
 ## Поддержка
 
-Поддержка и предложения по развитию: [Discord pnCases](https://discord.gg/rRbzq6cnc6).
-
-Ошибки и предложения также можно оставить в [GitHub Issues](https://github.com/Dy6HiLa/pnMarket/issues).
+- [Discord](https://discord.gg/SZxPP9surw)
+- [GitHub Issues](https://github.com/Dy6HiLa/pnMarket/issues)
 
 ## Лицензия
 
-Распространяется по лицензии [MIT](LICENSE).
+[MIT](LICENSE)

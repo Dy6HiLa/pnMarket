@@ -5,13 +5,13 @@ import ru.privatenull.market.MarketFilter.SortType;
 import java.util.Locale;
 
 public final class GuiLabels {
-    private final MessagesConfig messages;
+    private final GuiConfig gui;
 
-    public GuiLabels(MessagesConfig messages) {
-        this.messages = messages;
+    public GuiLabels(GuiConfig gui) {
+        this.gui = gui;
     }
 
     public String sort(SortType sort) {
-        return messages.message("gui.sort." + sort.name().toLowerCase(Locale.ROOT));
+        return gui.text("sort." + sort.name().toLowerCase(Locale.ROOT));
     }
 }

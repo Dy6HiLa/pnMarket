@@ -1,8 +1,8 @@
 package ru.privatenull.config;
 
-import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import ru.privatenull.pnlibrary.text.ColorUtil;
 
 import java.io.File;
 import java.util.Map;
@@ -37,6 +37,6 @@ public final class MessagesConfig {
         for (Map.Entry<String, ?> entry : placeholders.entrySet()) {
             value = value.replace("{" + entry.getKey() + "}", String.valueOf(entry.getValue()));
         }
-        return ChatColor.translateAlternateColorCodes('&', value);
+        return ColorUtil.colorize(value);
     }
 }

@@ -13,8 +13,4 @@ public interface MarketPayment {
     boolean withdraw(OfflinePlayer player, double amount);
 
     boolean deposit(OfflinePlayer player, double amount);
-
-    String format(double amount);
-
-    String suffix();
 }

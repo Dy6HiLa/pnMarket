@@ -44,7 +44,7 @@ public final class MarketRepository implements MarketStorage {
     }
 
     public MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit,
-                                int amount, long createdAt) throws IOException {
+                                int amount, long createdAt, long expiresAt) throws IOException {
         String encodedItem = encodeItem(item);
         while (true) {
             String id = UUID.randomUUID().toString();
@@ -54,10 +54,11 @@ public final class MarketRepository implements MarketStorage {
                     .append("pricePerUnit", pricePerUnit)
                     .append("amount", amount)
                     .append("createdAt", createdAt)
+                    .append("expiresAt", expiresAt)
                     .append("status", "ACTIVE");
             try {
                 collection.insertOne(document);
-                return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, "ACTIVE");
+                return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, expiresAt, "ACTIVE");
             } catch (MongoWriteException exception) {
                 if (exception.getError() != null && exception.getError().getCode() == 11000) continue;
                 throw exception;
@@ -114,6 +115,14 @@ public final class MarketRepository implements MarketStorage {
     public void updateStatus(String id, String status) {
         collection.updateOne(Filters.eq("_id", id),
                 new Document("$set", new Document("status", status)));
+    }
+
+    @Override
+    public void relist(String id, long createdAt, long expiresAt) {
+        collection.updateOne(Filters.eq("_id", id), Updates.combine(
+                Updates.set("status", "ACTIVE"),
+                Updates.set("createdAt", createdAt),
+                Updates.set("expiresAt", expiresAt)));
     }
 
     public Optional<PurchaseReservation> reserve(String id, int requestedAmount) {
@@ -180,19 +189,27 @@ public final class MarketRepository implements MarketStorage {
             String status = document.getString("status");
             if (status == null) status = "ACTIVE";
             long createdAt = rawCreatedAt.longValue();
+            Number rawExpiresAt = document.get("expiresAt", Number.class);
+            long expiresAt = rawExpiresAt == null || rawExpiresAt.longValue() <= 0
+                    ? safeAdd(createdAt, expiryMillis) : rawExpiresAt.longValue();
             if ("ACTIVE".equalsIgnoreCase(status)
-                    && System.currentTimeMillis() - createdAt >= expiryMillis) {
+                    && System.currentTimeMillis() >= expiresAt) {
                 updateStatus(id, "EXPIRED");
                 status = "EXPIRED";
             }
             return Optional.of(new MarketListing(
-                    id, sellerId, item, rawPrice.doubleValue(), amount, createdAt, status
+                    id, sellerId, item, rawPrice.doubleValue(), amount, createdAt, expiresAt, status
             ));
         } catch (IOException | IllegalArgumentException | ClassCastException exception) {
             logger.log(Level.WARNING, "Пропущен повреждённый лот MongoDB id=" + safeId(id)
                     + ": " + exception.getMessage());
             return Optional.empty();
         }
+    }
+
+    private static long safeAdd(long left, long right) {
+        if (right > 0 && left > Long.MAX_VALUE - right) return Long.MAX_VALUE;
+        return left + right;
     }
 
     private String encodeItem(ItemStack item) throws IOException {

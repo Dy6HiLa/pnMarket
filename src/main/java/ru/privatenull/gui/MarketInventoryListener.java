@@ -40,9 +40,17 @@ public final class MarketInventoryListener implements Listener {
             if (clicked.equals(top)) view.controller.handleFavoritesClick(player, view, event.getRawSlot());
             return;
         }
+        if (top.getHolder() instanceof NotificationCatalogView view) {
+            event.setCancelled(true);
+            if (clicked.equals(top)) view.controller.handleNotificationCatalogClick(
+                    player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+            return;
+        }
         if (top.getHolder() instanceof MyItemsView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handleMyItemsClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) {
+                view.controller.handleMyItemsClick(player, view, event.getRawSlot(), event.isRightClick());
+            }
             return;
         }
         if (top.getHolder() instanceof SellerView view) {
@@ -82,7 +90,8 @@ public final class MarketInventoryListener implements Listener {
                 || holder instanceof MyItemsView
                 || holder instanceof BundlePreviewView
                 || holder instanceof BundleCreateView
-                || holder instanceof FavoritesView;
+                || holder instanceof FavoritesView
+                || holder instanceof NotificationCatalogView;
     }
 
     @EventHandler
@@ -94,6 +103,7 @@ public final class MarketInventoryListener implements Listener {
         else if (event.getInventory().getHolder() instanceof BundlePreviewView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof BundleCreateView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
         else if (event.getInventory().getHolder() instanceof FavoritesView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
+        else if (event.getInventory().getHolder() instanceof NotificationCatalogView view) view.controller.closeView(event.getPlayer().getUniqueId(), event.getInventory());
     }
 
     @EventHandler
@@ -103,6 +113,6 @@ public final class MarketInventoryListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
-        plugin.notifyUpdate(event.getPlayer());
+        plugin.notifyOnJoin(event.getPlayer());
     }
 }

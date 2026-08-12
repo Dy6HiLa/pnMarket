@@ -4,11 +4,8 @@ import org.black_ixx.playerpoints.PlayerPointsAPI;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
 
-import java.text.DecimalFormat;
-
 public final class PlayerPointsPayment implements MarketPayment {
     private final PlayerPointsAPI api;
-    private final DecimalFormat format = new DecimalFormat("#,##0");
 
     public PlayerPointsPayment(PlayerPointsAPI api) {
         this.api = api;
@@ -41,16 +38,6 @@ public final class PlayerPointsPayment implements MarketPayment {
     public boolean deposit(OfflinePlayer player, double amount) {
         int points = toPoints(amount);
         return points > 0 && api != null && api.give(player.getUniqueId(), points);
-    }
-
-    @Override
-    public String format(double amount) {
-        return format.format(toPoints(amount));
-    }
-
-    @Override
-    public String suffix() {
-        return "⛃";
     }
 
     public boolean supports(double amount) {

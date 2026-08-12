@@ -71,7 +71,12 @@ public final class MarketCategories {
 
     public String categoryOf(MarketListing listing) {
         if (listing == null || listing.item() == null) return ALL;
-        return definitions.stream().filter(definition -> definition.matches(listing.item()))
+        return categoryOf(listing.item());
+    }
+
+    public String categoryOf(ItemStack item) {
+        if (item == null || item.getType().isAir()) return ALL;
+        return definitions.stream().filter(definition -> definition.matches(item))
                 .map(Definition::id).findFirst().orElse(ALL);
     }
 

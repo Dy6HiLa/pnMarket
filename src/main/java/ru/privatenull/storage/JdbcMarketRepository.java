@@ -56,10 +56,10 @@ public final class JdbcMarketRepository implements MarketStorage {
 
     @Override
     public synchronized MarketListing create(UUID sellerId, ItemStack item, double pricePerUnit,
-                                              int amount, long createdAt) throws IOException {
+                                              int amount, long createdAt, long expiresAt) throws IOException {
         String id = UUID.randomUUID().toString();
-        String sql = "INSERT INTO " + tableName + " (id, seller, item, price_per_unit, amount, created_at, status) "
-                + "VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE')";
+        String sql = "INSERT INTO " + tableName + " (id, seller, item, price_per_unit, amount, created_at, expires_at, status) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, id);
             statement.setString(2, sellerId.toString());
@@ -67,8 +67,9 @@ public final class JdbcMarketRepository implements MarketStorage {
             statement.setDouble(4, pricePerUnit);
             statement.setInt(5, amount);
             statement.setLong(6, createdAt);
+            statement.setLong(7, expiresAt);
             statement.executeUpdate();
-            return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, "ACTIVE");
+            return new MarketListing(id, sellerId, item.clone(), pricePerUnit, amount, createdAt, expiresAt, "ACTIVE");
         } catch (SQLException exception) {
             throw new IllegalStateException("Не удалось сохранить лот: " + exception.getMessage(), exception);
         }
@@ -125,6 +126,13 @@ public final class JdbcMarketRepository implements MarketStorage {
     }
 
     @Override
+    public synchronized void relist(String id, long createdAt, long expiresAt) {
+        executeUpdate("UPDATE " + tableName
+                + " SET status = 'ACTIVE', created_at = ?, expires_at = ? WHERE id = ?",
+                createdAt, expiresAt, id);
+    }
+
+    @Override
     public synchronized Optional<PurchaseReservation> reserve(String id, int requestedAmount) {
         if (id == null || id.isBlank() || requestedAmount <= 0) return Optional.empty();
         Optional<MarketListing> result = findById(id);
@@ -168,9 +176,14 @@ public final class JdbcMarketRepository implements MarketStorage {
         String sql = "CREATE TABLE IF NOT EXISTS " + tableName + " ("
                 + "id VARCHAR(36) PRIMARY KEY, seller VARCHAR(36) NOT NULL, item TEXT NOT NULL, "
                 + "price_per_unit DOUBLE NOT NULL, amount INTEGER NOT NULL, created_at BIGINT NOT NULL, "
-                + "status VARCHAR(16) NOT NULL)";
+                + "expires_at BIGINT NOT NULL DEFAULT 0, status VARCHAR(16) NOT NULL)";
         try (Statement statement = connection.createStatement()) {
             statement.execute(sql);
+            try {
+                statement.execute("ALTER TABLE " + tableName + " ADD COLUMN expires_at BIGINT NOT NULL DEFAULT 0");
+            } catch (SQLException ignored) {
+                // Existing installations already containing the column need no migration.
+            }
         }
     }
 
@@ -192,17 +205,24 @@ public final class JdbcMarketRepository implements MarketStorage {
             String id = result.getString("id");
             String status = result.getString("status");
             long createdAt = result.getLong("created_at");
-            if ("ACTIVE".equalsIgnoreCase(status) && System.currentTimeMillis() - createdAt >= expiryMillis) {
+            long storedExpiresAt = result.getLong("expires_at");
+            long expiresAt = storedExpiresAt > 0 ? storedExpiresAt : safeAdd(createdAt, expiryMillis);
+            if ("ACTIVE".equalsIgnoreCase(status) && System.currentTimeMillis() >= expiresAt) {
                 updateStatus(id, "EXPIRED");
                 status = "EXPIRED";
             }
             return Optional.of(new MarketListing(id, UUID.fromString(result.getString("seller")),
                     decodeItem(result.getString("item")), result.getDouble("price_per_unit"),
-                    result.getInt("amount"), createdAt, status));
+                    result.getInt("amount"), createdAt, expiresAt, status));
         } catch (SQLException | IOException | IllegalArgumentException exception) {
             logger.log(Level.WARNING, "Пропущен повреждённый SQL-лот: " + exception.getMessage());
             return Optional.empty();
         }
+    }
+
+    private static long safeAdd(long left, long right) {
+        if (right > 0 && left > Long.MAX_VALUE - right) return Long.MAX_VALUE;
+        return left + right;
     }
 
     private void executeUpdate(String sql, Object... values) {

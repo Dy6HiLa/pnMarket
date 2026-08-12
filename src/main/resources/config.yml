@@ -1,97 +1,88 @@
+# ХРАНИЛИЩЕ
 storage:
-  # sqlite, mysql или mongodb. SQLite работает без отдельного сервера.
-  type: sqlite
-  sqlite:
-    # Файл создаётся в plugins/pnMarket/.
-    file: "market.db"
+  type: sqlite # sqlite, mysql или mongo
+  sqlite: { file: "market.db" }
   mysql:
-    # Можно указать полный JDBC URL вместо host/port/database.
     url: ""
-    host: "localhost"
+    host: localhost
     port: 3306
-    database: "minecraft"
-    username: "root"
+    database: minecraft
+    username: root
     password: ""
   mongo:
-    # Для production задайте PNMARKET_MONGO_URI в окружении сервера.
     uri: "mongodb://localhost:27017"
-    database: "minecraft"
-    collection: "auction"
-limits:
-  # Максимум одновременно активных лотов игрока. default действует для всех,
-  # а ключ с названием группы Vault переопределяет лимит для этой группы.
-  default: 3
-  gifest: 10
+    database: minecraft
+    collection: auction
 
-listing-price:
-  # Цена за весь лот, не за одну единицу предмета. maximum: 0 отключает верхнюю границу.
-  minimum: 1
-  maximum: 1000000
+# ВАЛЮТА (type: vault, playerpoints или excellent)
+currency:
+  default:
+    enabled: true
+    type: vault
+    format: "&a{amount}⛃"
+    excellent-id: coins
+  donate:
+    enabled: true
+    type: playerpoints
+    format: "&d{amount} PP"
+    excellent-id: points
 
-donate-listing-price:
-  # Цена выставления на /dah sell в PlayerPoints. Она делится на количество предметов в лоте.
-  minimum: 1
-  maximum: 1000000
+# ЦЕНЫ
+price:
+  mode: short # short (1K) или full (1000)
+  short:
+    decimals: 1 # Знаков после запятой
+    thousand: K
+    million: M
+    billion: B
+    trillion: T
+    quadrillion: Q
+  limits: # Мин/макс цена
+    default: { min: 1, max: "1M" }
+    donate: { min: 1, max: "1M" }
+  statistics:
+    enabled: true
+    permission: pnmarket.admin
 
-# Шаблоны цены. {price} заменяется на сумму; поддерживаются стандартные цвета &.
-prefix-vault: "&a{price}⛃"
-prefix-playerpoints: "&d{price} PP"
+# КОМИССИЯ (% от полной цены лота)
+commission:
+  enabled: false
+  groups:
+    default: { listing: 2.0, sale: 5.0 }
+    vip: { listing: 1.0, sale: 3.0 }
+    premium: { listing: 0.0, sale: 1.0 }
 
-# /ah kit и /dah kit забирают занятые слоты основного инвентаря в один лот.
-kits:
-  # Лимит занятых слотов зависит от основной Vault-группы игрока.
-  max-slots:
-    default: 10
-    vip: 15
-    admin: 36
-  # Защита БД и клиента от предметов с чрезмерно большим NBT/PDC.
-  max-serialized-bytes: 131072
-  blocked-materials:
-    - BEDROCK
-    - BARRIER
-    - COMMAND_BLOCK
-    - CHAIN_COMMAND_BLOCK
-    - REPEATING_COMMAND_BLOCK
-    - STRUCTURE_BLOCK
-    - STRUCTURE_VOID
-    - JIGSAW
+# ПРОДАЖА
+sell:
+  limits: # Лимит товаров
+    default: 3
+    gifest: 10
+  expiration: # Время жизни лота
+    default: 24h
+    groups:
+      default: 24h
+      vip: 48h
+      admin: 7d
+  auto: # Авто-цена (median или average)
+    permission: pnmarket.sell.auto
+    algorithm: median
+  kits:
+    max-slots: # Слоты по группам
+      default: 10
+      vip: 15
+      admin: 36
+    blocked-materials: # Запрещенные блоки
+      - BEDROCK
+      - BARRIER
+      - COMMAND_BLOCK
+      - CHAIN_COMMAND_BLOCK
+      - REPEATING_COMMAND_BLOCK
+      - STRUCTURE_BLOCK
+      - STRUCTURE_VOID
+      - JIGSAW
 
-# Статистика активных лотов с полностью похожим предметом.
-price-statistics:
-  enabled: true
-  permission: "pnmarket.admin"
-  minimum-samples: 1
-
-# Избранные материалы/названия и уведомления о новых лотах.
+# УВЕДОМЛЕНИЯ
 notifications:
   enabled: true
-  max-favorites: 10
-
-# Категории отображаются в указанном порядке. Можно добавлять свои секции.
-# Правила категории: materials - точные Material ID, material-contains - часть Material ID,
-# name-contains - часть пользовательского названия, edible - все съедобные предметы.
-categories:
-  bundles:
-    name: "Наборы"
-    name-contains: ["Набор"]
-  weapon:
-    name: "Оружие"
-    material-contains: ["_SWORD", "_AXE", "BOW", "CROSSBOW", "TRIDENT"]
-  armor:
-    name: "Снаряжение"
-    material-contains: ["_HELMET", "_CHESTPLATE", "_LEGGINGS", "_BOOTS", "ELYTRA", "SHIELD"]
-  food:
-    name: "Еда"
-    edible: true
-  potion:
-    name: "Зелья"
-    materials: ["POTION", "SPLASH_POTION", "LINGERING_POTION", "TIPPED_ARROW"]
-  ore:
-    name: "Руды"
-    material-contains: ["ORE", "INGOT", "NUGGET", "GEM"]
-  sphere:
-    name: "Сферы"
-    name-contains: ["сфера"]
-  donate:
-    name: "Донат-предметы"
-    name-contains: ["донат", "donate"]
+  max-favorites: 100 # Лимит уведомлений
+  max-pending: 50   # Лимит очереди

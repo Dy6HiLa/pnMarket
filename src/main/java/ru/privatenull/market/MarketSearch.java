@@ -4,6 +4,7 @@ import org.bukkit.ChatColor;
 import org.bukkit.inventory.ItemStack;
 import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.model.MarketListing;
+import ru.privatenull.util.NumberParser;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -43,6 +44,15 @@ public final class MarketSearch {
         if (listing == null || listing.item() == null) return false;
 
         String q = query.toLowerCase(Locale.ROOT);
+
+        try {
+            double requestedPrice = NumberParser.parse(q);
+            double listingPrice = listing.pricePerUnit() * listing.amount();
+            double tolerance = Math.max(0.001, Math.abs(requestedPrice) * 0.000001);
+            if (Math.abs(listingPrice - requestedPrice) <= tolerance) return true;
+        } catch (NumberFormatException ignored) {
+            // A normal text query continues through localized name and material matching.
+        }
 
         String name = extractName(listing);
         if (name != null && name.toLowerCase(Locale.ROOT).contains(q)) {

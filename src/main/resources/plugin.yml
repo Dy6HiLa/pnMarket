@@ -5,14 +5,23 @@ api-version: '1.16'
 authors: [ privatenull ]
 description: pnMarket - AuctionPlugin
 website: https://github.com/Dy6HiLa/pnMarket
-depend: [Vault]
-softdepend: [PlayerPoints]
+softdepend: [Vault, PlayerPoints, ExcellentEconomy]
+libraries:
+  - org.xerial:sqlite-jdbc:3.46.1.3
 commands:
+  pnmarket:
+    description: Панель администратора pnMarket
+    aliases: [market, pnm]
+    usage: /pnmarket [machine|reload]
+    permission: pnmarket.admin
   dah:
     description: Команда для открытия аукциона pnMarket
   ah:
     description: Команда для открытия аукциона pnMarket
 permissions:
+  pnmarket.sell.auto:
+    description: Автоматически рассчитывать цену лота через /ah sell auto
+    default: false
   pnmarket.admin:
-    description: Получать уведомления об обновлениях pnMarket
+    description: Управление pnMarket и уведомления об обновлениях
     default: op

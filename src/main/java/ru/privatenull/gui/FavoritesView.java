@@ -10,6 +10,7 @@ final class FavoritesView implements InventoryHolder {
     MarketGuiController controller;
     Inventory inventory;
     Map<Integer, String> slotToFavoriteId;
+    int page;
 
     @Override
     public @NotNull Inventory getInventory() {
