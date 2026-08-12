@@ -66,6 +66,12 @@
       <img src="docs/screenshots/notification-category-lore.png" alt="Описание категории pnMarket" height="210">
     </td>
   </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <strong>Редактор разметки</strong><br><br>
+      <img src="docs/screenshots/layout-editor.png" alt="Редактор разметки pnMarket" width="345">
+    </td>
+  </tr>
 </table>
 
 ## Каталог уведомлений

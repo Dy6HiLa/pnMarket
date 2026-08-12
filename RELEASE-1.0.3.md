@@ -8,19 +8,25 @@
   <tr>
     <td align="center" width="50%">
       <strong>Каталог предметов</strong><br><br>
-      <img src="docs/screenshots/notification-catalog.png" alt="Каталог предметов" width="100%">
+      <img src="https://raw.githubusercontent.com/Dy6HiLa/pnMarket/main/docs/screenshots/notification-catalog.png" alt="Каталог предметов" width="100%">
     </td>
     <td align="center" width="50%">
       <strong>Категории уведомлений</strong><br><br>
-      <img src="docs/screenshots/notification-categories.png" alt="Категории уведомлений" width="100%">
+      <img src="https://raw.githubusercontent.com/Dy6HiLa/pnMarket/main/docs/screenshots/notification-categories.png" alt="Категории уведомлений" width="100%">
     </td>
   </tr>
   <tr>
     <td align="center" width="50%">
-      <img src="docs/screenshots/notification-menu-lore.png" alt="Меню уведомлений" height="210">
+      <img src="https://raw.githubusercontent.com/Dy6HiLa/pnMarket/main/docs/screenshots/notification-menu-lore.png" alt="Меню уведомлений" height="210">
     </td>
     <td align="center" width="50%">
-      <img src="docs/screenshots/notification-category-lore.png" alt="Описание категории" height="210">
+      <img src="https://raw.githubusercontent.com/Dy6HiLa/pnMarket/main/docs/screenshots/notification-category-lore.png" alt="Описание категории" height="210">
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <strong>Редактор разметки</strong><br><br>
+      <img src="https://raw.githubusercontent.com/Dy6HiLa/pnMarket/main/docs/screenshots/layout-editor.png" alt="Редактор разметки pnMarket" width="345">
     </td>
   </tr>
 </table>
