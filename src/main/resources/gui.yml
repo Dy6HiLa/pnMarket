@@ -69,7 +69,7 @@ search:
 
 auction-switch:
   regular:
-    material: NETHER_STAR
+    base64: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvNTMzZmM5YTQ1YmUxM2NhNTdhNzhiMjE3NjJjNmUxMjYyZGFlNDExZjEzMDQ4Yjk2M2Q5NzJhMjllMDcwOTZhYiJ9fX0="
     name: "&x&D&5&B&F&F&F Смена аукциона"
     lore:
       - ""
@@ -81,7 +81,7 @@ auction-switch:
       - ""
       - "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ &fчтобы открыть"
   donate:
-    material: GOLD_INGOT
+    base64: "eyJ0ZXh0dXJlcyI6eyJTS0lOIjp7InVybCI6Imh0dHA6Ly90ZXh0dXJlcy5taW5lY3JhZnQubmV0L3RleHR1cmUvYjMxMWU4NDIyNDk3NDUxMTMzMzM4NzhmZDVhOGQ4ZWIyMjgwYmNiYWI3Njg5ZTQ3M2YxNjY5NjIzYTExYzk5NyJ9fX0="
     name: "&x&D&5&B&F&F&F Смена аукциона"
     lore:
       - ""
@@ -127,6 +127,8 @@ my-items:
 
 favorites:
   title: "Активные уведомления"
+  auto-buy-enabled: "&aвключена"
+  auto-buy-disabled: "&cвыключена"
   menu:
     material: ENDER_EYE
     name: "&x&D&5&B&F&F&FИзбранное и уведомления"
@@ -167,11 +169,13 @@ favorites:
       - " &7- &fОтслеживаемая цена: {price}"
       - " &7- &fНовые лоты: &aвключены"
       - " &7- &fСнижение цены: &aвключено"
+      - " &7- &fАвтопокупка: {auto-buy}"
       - ""
       - " &7- &fСообщение придёт сразу после"
       - "    &fпоявления подходящего товара."
       - ""
       - "&x&F&F&0&0&0&0➥ &fНажмите, &eЛКМ&f, чтобы отключить"
+      - "&x&F&F&8&7&0&2➥ &fShift+ЛКМ — переключить автопокупку"
   enchantment:
     name: "&x&B&4&E&E&4&1{value}"
     lore-top:
@@ -187,6 +191,7 @@ favorites:
       - "    &fна одном продаваемом предмете."
       - ""
       - "&x&F&F&0&0&0&0➥ &fНажмите, &eЛКМ&f, чтобы удалить профиль"
+      - "&x&F&F&8&7&0&2➥ &fShift+ЛКМ — переключить автопокупку: {auto-buy}"
   catalog:
     title: "Избранное и уведомления"
     no-price: "&7нет на аукционе"
@@ -199,12 +204,21 @@ favorites:
         - "&x&9&E&F&C&6&5 «Товар в каталоге»"
         - " &7- &fЛучшая цена за единицу: {price}"
         - " &7- &fОтслеживание: {status}"
+        - " &7- &fОтдельных профилей: &e{profiles}"
+        - " &7- &fАвтопокупка: {auto-buy}"
         - ""
         - "&x&D&5&B&F&F&F «Выберите режим»"
         - " &7- &eЛКМ &f— уведомлять о любом лоте"
         - "    &fбез требований к зачарованиям."
-        - " &7- &eПКМ &f— собрать один профиль"
+        - " &7- &eПКМ &f— создать отдельный профиль"
         - "    &fиз нескольких обязательных чар."
+        - "    &fПрофили не заменяют друг друга."
+        - " &7- &eShift+ЛКМ &f— включить автопокупку"
+        - "    &fне дороже показанной цены."
+        - " &7- &eShift+ПКМ &f— задать свою максимальную цену."
+        - ""
+        - " &8Собственные лоты не покупаются и"
+        - " &8не создают уведомления."
     category:
       material: COMPASS
       name: "&x&E&E&8&0&4&1Категории предметов"
@@ -247,6 +261,10 @@ favorites:
           - ""
           - " &7- &fОни будут проверяться вместе"
           - "    &fна одном предмете из лота."
+          - ""
+          - "&x&F&F&8&7&0&2➥ &fНажмите сюда, чтобы сохранить"
+          - "   &fусловия отдельным профилем. После"
+          - "   &fсохранения можно сразу создать следующий."
           - ""
         conditions-title: "&x&D&5&B&F&F&F «Сейчас выбрано»"
         condition: " &7- &d{enchantment} &fот &e{level} уровня"
@@ -349,6 +367,52 @@ pagination:
     base64: "27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065"
     name: "&8Следующей страницы нет"
     lore: ["", "&7Это последняя страница.", ""]
+
+# ХРАНИЛИЩЕ ДОСТАВОК АВТОПОКУПКИ — material и base64 поддерживаются у каждой кнопки
+delivery:
+  title: "Доставки автопокупки"
+  decor:
+    black: { material: BLACK_STAINED_GLASS_PANE, name: " ", lore: [] }
+    orange: { material: ORANGE_STAINED_GLASS_PANE, name: " ", lore: [] }
+  info:
+    material: ENDER_CHEST
+    name: "&x&D&5&B&F&F&FХранилище доставок"
+    lore:
+      - ""
+      - "&x&9&E&F&C&6&5 «Автопокупка»"
+      - " &7- &fПредметов на хранении: &e{amount}"
+      - " &7- &fСтраница: &e{page}&7/&e{pages}"
+      - ""
+      - " &7- &fДоставки сохраняются в базе"
+      - "    &fи не пропадут после перезапуска."
+  item:
+    lore:
+      - ""
+      - "&x&9&E&F&C&6&5 «Доставка автопокупки»"
+      - " &7- &fПредмет уже оплачен и закреплён за вами."
+      - ""
+      - "&x&F&F&8&7&0&2➥ &fНажмите, &eЛКМ&f, чтобы забрать"
+  navigation:
+    previous:
+      base64: "69ea1d86247f4af351ed1866bca6a3040a06c68177c78e42316a1098e60fb7d3"
+      name: "&x&F&F&0&0&0&0Предыдущая страница"
+      lore: ["", "&7Перейти на страницу &f{page}&7.", ""]
+    next:
+      base64: "8271a47104495e357c3e8e80f511a9f102b0700ca9b88e88b795d33ff20105eb"
+      name: "&x&7&C&F&F&8&0Следующая страница"
+      lore: ["", "&7Перейти на страницу &f{page}&7.", ""]
+    previous-disabled:
+      base64: "27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065"
+      name: "&8Предыдущей страницы нет"
+      lore: ["", "&7Вы уже на первой странице.", ""]
+    next-disabled:
+      base64: "27548362a24c0fa8453e4d93e68c5969ddbde57bf6666c0319c1ed1e84d89065"
+      name: "&8Следующей страницы нет"
+      lore: ["", "&7Это последняя страница.", ""]
+    close:
+      base64: "69ea1d86247f4af351ed1866bca6a3040a06c68177c78e42316a1098e60fb7d3"
+      name: "&x&F&F&0&0&0&0Закрыть"
+      lore: ["", "&x&F&F&8&7&0&2➥ &fНажмите, чтобы закрыть", ""]
 
 filter:
   category:

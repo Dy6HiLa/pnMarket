@@ -1,5 +1,8 @@
 package ru.privatenull.market;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.ConfigurationSection;
@@ -7,22 +10,27 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.EnchantmentStorageMeta;
+import org.bukkit.entity.Player;
 import ru.privatenull.PnMarketPlugin;
-import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.model.MarketListing;
+import ru.privatenull.pnlibrary.text.ColorUtil;
+import ru.privatenull.service.MarketStorageFactory;
+import ru.privatenull.storage.MarketStorage;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.*;
 
 public final class FavoriteService {
     private final PnMarketPlugin plugin;
-    private final File file;
+    private final File legacyFile;
+    private final MarketStorage storage;
     private final Map<UUID, Map<Boolean, List<FavoriteFilter>>> favorites = new LinkedHashMap<>();
 
     public FavoriteService(PnMarketPlugin plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "favorites.yml");
+        this.legacyFile = new File(plugin.getDataFolder(), "favorites.yml");
+        this.storage = plugin.storageFactory().openFavorites();
+        migrateLegacyFile();
         load();
     }
 
@@ -31,7 +39,7 @@ public final class FavoriteService {
     }
 
     public synchronized AddResult addMaterial(UUID playerId, boolean donate, String rawMaterial) {
-        Material material = ItemLocalization.matchMaterial(rawMaterial);
+        Material material = plugin.itemLocalization().matchMaterial(rawMaterial);
         if (material == null || material.isAir()) return AddResult.INVALID;
         return add(playerId, donate, FavoriteFilter.Type.MATERIAL, material.name(), 0);
     }
@@ -48,16 +56,17 @@ public final class FavoriteService {
     }
 
     public synchronized AddResult addPrice(UUID playerId, boolean donate, String itemKey, double price) {
-        Material material = ItemLocalization.getKeyMaterial(itemKey);
+        Material material = plugin.itemLocalization().getKeyMaterial(itemKey);
         if (material == null || material.isAir()) return AddResult.INVALID;
         List<FavoriteFilter> values = mutableList(playerId, donate);
         for (int index = 0; index < values.size(); index++) {
             FavoriteFilter filter = values.get(index);
             if (filter.type() != FavoriteFilter.Type.PRICE
-                    || !filter.value().equalsIgnoreCase(itemKey)) continue;
-            values.set(index, new FavoriteFilter(filter.id(), filter.type(), filter.value(), Math.max(0, price),
-                    filter.enchantment(), filter.enchantmentLevel()));
-            save();
+                    || !filter.value().equalsIgnoreCase(itemKey) || filter.hasEnchantment()) continue;
+            FavoriteFilter updated = new FavoriteFilter(filter.id(), filter.type(), filter.value(), Math.max(0, price),
+                    filter.enchantment(), filter.enchantmentLevel(), filter.autoBuy());
+            storage.save(playerId, donate, updated);
+            values.set(index, updated);
             return AddResult.UPDATED;
         }
         return add(playerId, donate, FavoriteFilter.Type.PRICE, itemKey, Math.max(0, price));
@@ -71,8 +80,38 @@ public final class FavoriteService {
     public synchronized FavoriteFilter priceFilter(UUID playerId, boolean donate, String itemKey) {
         return list(playerId, donate).stream()
                 .filter(filter -> filter.type() == FavoriteFilter.Type.PRICE
-                        && filter.value().equalsIgnoreCase(itemKey))
+                        && filter.value().equalsIgnoreCase(itemKey)
+                        && !filter.hasEnchantment())
                 .findFirst().orElse(null);
+    }
+
+    public synchronized List<FavoriteFilter> priceFilters(UUID playerId, boolean donate, String itemKey) {
+        return list(playerId, donate).stream().filter(filter -> filter.type() == FavoriteFilter.Type.PRICE
+                && filter.value().equalsIgnoreCase(itemKey)).toList();
+    }
+
+    /** Counts independent profiles for one item: a plain profile and every enchantment variant. */
+    public synchronized int profileCount(UUID playerId, boolean donate, String itemKey) {
+        return priceFilters(playerId, donate, itemKey).size();
+    }
+
+    public synchronized AddResult addEnchantmentProfile(UUID playerId, boolean donate, Material material,
+                                                         Map<String, Integer> enchantments, double price) {
+        if (material == null || material.isAir() || enchantments == null || enchantments.isEmpty()) {
+            return AddResult.INVALID;
+        }
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        enchantments.forEach((key, level) -> { if (key != null && !key.isBlank() && level > 0) normalized.put(key, level); });
+        if (normalized.isEmpty()) return AddResult.INVALID;
+        List<FavoriteFilter> values = mutableList(playerId, donate);
+        boolean duplicate = values.stream().anyMatch(filter -> filter.type() == FavoriteFilter.Type.PRICE
+                && filter.value().equalsIgnoreCase(material.name()) && filter.enchantments().equals(normalized));
+        if (duplicate) return AddResult.DUPLICATE;
+        FavoriteFilter filter = new FavoriteFilter(UUID.randomUUID().toString(), FavoriteFilter.Type.PRICE,
+                material.name(), Math.max(0, price)).withEnchantments(normalized);
+        storage.save(playerId, donate, filter);
+        values.add(filter);
+        return AddResult.ADDED;
     }
 
     public synchronized FavoriteFilter enchantmentFilter(UUID playerId, boolean donate, Material material,
@@ -98,7 +137,6 @@ public final class FavoriteService {
             if (existing != null && conditions.isEmpty()) remove(playerId, donate, existing.id());
             else if (existing != null) {
                 replaceFilter(playerId, donate, existing, existing.withEnchantments(conditions));
-                save();
             }
             return AddResult.UPDATED;
         }
@@ -106,72 +144,174 @@ public final class FavoriteService {
         conditions.put(enchantmentKey, normalizedLevel);
         if (existing != null) {
             replaceFilter(playerId, donate, existing, existing.withEnchantments(conditions));
-            save();
             return AddResult.UPDATED;
         }
         List<FavoriteFilter> values = mutableList(playerId, donate);
-        int maximum = Math.max(1, plugin.getConfig().getInt("notifications.max-favorites", 100));
-        if (values.size() >= maximum) return AddResult.LIMIT;
         FavoriteFilter filter = new FavoriteFilter(UUID.randomUUID().toString(), FavoriteFilter.Type.PRICE,
                 material.name(), Math.max(0, price)).withEnchantments(conditions);
+        storage.save(playerId, donate, filter);
         values.add(filter);
-        save();
         return AddResult.ADDED;
     }
 
     public synchronized boolean remove(UUID playerId, boolean donate, String id) {
         List<FavoriteFilter> values = mutableList(playerId, donate);
-        boolean removed = values.removeIf(filter -> filter.id().equals(id));
-        if (removed) save();
-        return removed;
+        boolean exists = values.stream().anyMatch(filter -> filter.id().equals(id));
+        if (!exists) return false;
+        storage.delete(playerId, donate, id);
+        values.removeIf(filter -> filter.id().equals(id));
+        return true;
     }
 
     public synchronized void clear(UUID playerId, boolean donate) {
+        storage.clear(playerId, donate);
         mutableList(playerId, donate).clear();
-        save();
+    }
+
+    public synchronized boolean toggleAutoBuy(UUID playerId, boolean donate, String filterId) {
+        List<FavoriteFilter> values = mutableList(playerId, donate);
+        for (FavoriteFilter filter : values) {
+            if (!filter.id().equals(filterId) || filter.type() != FavoriteFilter.Type.PRICE
+                    || filter.maximumPrice() <= 0) continue;
+            replaceFilter(playerId, donate, filter, filter.withAutoBuy(!filter.autoBuy()));
+            return true;
+        }
+        return false;
+    }
+
+    public synchronized boolean configureAutoBuy(UUID playerId, boolean donate, String filterId, double price) {
+        if (price <= 0) return false;
+        List<FavoriteFilter> values = mutableList(playerId, donate);
+        for (FavoriteFilter filter : values) {
+            if (!filter.id().equals(filterId) || filter.type() != FavoriteFilter.Type.PRICE) continue;
+            FavoriteFilter updated = new FavoriteFilter(filter.id(), filter.type(), filter.value(), price,
+                    filter.enchantment(), filter.enchantmentLevel(), true);
+            replaceFilter(playerId, donate, filter, updated);
+            return true;
+        }
+        return false;
     }
 
     public synchronized void notifyListing(MarketListing listing, boolean donate) {
         if (!plugin.getConfig().getBoolean("notifications.enabled", true)) return;
         ItemStack item = listing.item();
-        String itemName = ItemLocalization.getPlainName(item);
-        double unitPrice = listing.pricePerUnit();
-        boolean changed = false;
+        String itemName = plugin.itemLocalization().getPlainName(item);
 
         for (Map.Entry<UUID, Map<Boolean, List<FavoriteFilter>>> playerEntry : favorites.entrySet()) {
             UUID playerId = playerEntry.getKey();
             if (playerId.equals(listing.sellerId())) continue;
+            Player player = plugin.getServer().getPlayer(playerId);
             List<FavoriteFilter> filters = playerEntry.getValue().getOrDefault(donate, List.of());
-            FavoriteFilter matched = firstMatch(filters, item, itemName);
-            if (matched == null) continue;
-
-            String messageKey = "notification.favorite-listing";
-            Map<String, Object> replacements = new HashMap<>();
-            replacements.put("item", itemName);
-            replacements.put("filter", filterLabel(matched));
-            replacements.put("command", (donate ? "/dah" : "/ah") + " search " + itemName);
-            replacements.put("price", plugin.formatPrice(donate, unitPrice, null));
-            replacements.put("enchantment", enchantmentSummary(matched));
-            replacements.put("level", matched.enchantmentLevel());
-            replacements.put("condition", matched.hasEnchantment()
-                    ? enchantmentSummary(matched) : "без дополнительных условий");
-
-            if (matched.type() == FavoriteFilter.Type.PRICE) {
-                double previous = matched.maximumPrice();
-                messageKey = previous > 0 && unitPrice < previous
-                        ? "notification.price-lowered" : "notification.price-appearance";
-                replacements.put("old-price", previous > 0
-                        ? plugin.formatPrice(donate, previous, null) : plugin.messages().message("favorites.filter.no-price"));
-                if (previous <= 0 || unitPrice < previous) {
-                    replaceFilter(playerId, donate, matched, new FavoriteFilter(matched.id(), matched.type(),
-                            matched.value(), unitPrice, matched.enchantment(), matched.enchantmentLevel()));
-                    changed = true;
-                }
+            List<FavoriteFilter> matched = matchingFilters(filters, item, itemName);
+            if (matched.isEmpty()) continue;
+            if (matched.stream().anyMatch(filter -> shouldAutoBuy(filter, listing))) {
+                plugin.autoPurchase(playerId, listing, donate);
             }
-            plugin.queueNotification(playerId, plugin.messages().message(messageKey, replacements));
+            if (player != null && player.isOnline()) {
+                sendListingNotification(player, List.of(listing), donate, matched.get(0));
+            }
         }
-        if (changed) save();
     }
+
+    /**
+     * Rebuilds missed favorite notifications from the live market snapshot. No offline
+     * message queue is needed, so unavailable listings can never be delivered later.
+     */
+    public synchronized void notifyAvailable(Player player, long offlineSince,
+                                             List<MarketListing> regularListings,
+                                             List<MarketListing> donateListings) {
+        if (player == null || !plugin.getConfig().getBoolean("notifications.enabled", true)) return;
+        if (offlineSince <= 0) return;
+        long now = System.currentTimeMillis();
+        Map<NotificationGroup, List<MarketListing>> grouped = new LinkedHashMap<>();
+
+        for (boolean donate : List.of(false, true)) {
+            List<FavoriteFilter> filters = favorites.getOrDefault(player.getUniqueId(), Map.of())
+                    .getOrDefault(donate, List.of());
+            if (filters.isEmpty()) continue;
+            List<MarketListing> source = donate ? donateListings : regularListings;
+            List<MarketListing> listings = source.stream()
+                    .filter(listing -> listing.amount() > 0)
+                    .filter(listing -> "ACTIVE".equalsIgnoreCase(listing.status()))
+                    .filter(listing -> listing.createdAt() > offlineSince)
+                    .filter(listing -> listing.expiresAt() > now)
+                    .filter(listing -> !listing.sellerId().equals(player.getUniqueId()))
+                    .sorted(Comparator.comparingLong(MarketListing::createdAt).reversed())
+                    .toList();
+            for (MarketListing listing : listings) {
+                String itemName = plugin.itemLocalization().getPlainName(listing.item());
+                List<FavoriteFilter> matched = matchingFilters(filters, listing.item(), itemName);
+                if (matched.isEmpty()) continue;
+                if (matched.stream().anyMatch(filter -> shouldAutoBuy(filter, listing))) {
+                    plugin.autoPurchase(player.getUniqueId(), listing, donate);
+                }
+                grouped.computeIfAbsent(new NotificationGroup(donate, matched.get(0)), ignored -> new ArrayList<>())
+                        .add(listing);
+            }
+        }
+        grouped.forEach((group, listings) -> {
+            MarketListing cheapest = listings.stream()
+                    .min(Comparator.comparingDouble(MarketListing::pricePerUnit)).orElse(null);
+            sendListingNotification(player, listings, group.donate(), group.filter());
+        });
+    }
+
+    private void sendListingNotification(Player player, List<MarketListing> listings, boolean donate,
+                                         FavoriteFilter matched) {
+        if (listings.isEmpty()) return;
+        MarketListing newest = listings.stream().min(Comparator.comparingDouble(MarketListing::pricePerUnit))
+                .orElse(listings.get(0));
+        String itemName = plugin.itemLocalization().getPlainName(newest.item());
+        String command = (donate ? "/dah" : "/ah") + " view " + newest.id();
+        String elapsed = NotificationTimeFormatter.elapsed(newest.createdAt(), System.currentTimeMillis());
+
+        Component message = ColorUtil.component(plugin.messages().message("notification.favorite-found",
+                        Map.of("item", itemName, "time", elapsed)))
+                .hoverEvent(HoverEvent.showText(notificationHover(listings, donate)))
+                .clickEvent(ClickEvent.runCommand(command));
+        player.sendMessage(message);
+        plugin.playSound(player, "action.favorite-found");
+    }
+
+    private Component notificationHover(List<MarketListing> listings, boolean donate) {
+        int visible = Math.min(listings.size(), 5);
+        List<Component> lines = new ArrayList<>();
+        for (int index = 0; index < visible; index++) {
+            MarketListing listing = listings.get(index);
+            double totalPrice = listing.pricePerUnit() * listing.amount();
+            Map<String, Object> values = Map.of(
+                    "item", plugin.itemLocalization().getPlainName(listing.item()),
+                    "amount", listing.amount(),
+                    "unit-price", plugin.formatPrice(donate, listing.pricePerUnit(), null),
+                    "total-price", plugin.formatPrice(donate, totalPrice, null));
+            plugin.messages().lines("notification.favorite-found-hover", values).stream()
+                    .map(ColorUtil::component)
+                    .forEach(lines::add);
+            if (index + 1 < visible) lines.add(Component.empty());
+        }
+        if (listings.size() > visible) {
+            lines.add(Component.empty());
+            lines.add(ColorUtil.component(plugin.messages().message("notification.favorite-found-more",
+                    Map.of("amount", listings.size() - visible))));
+        }
+        lines.add(Component.empty());
+        lines.add(ColorUtil.component(plugin.messages().message("notification.favorite-found-click")));
+        Component hover = Component.empty();
+        for (int index = 0; index < lines.size(); index++) {
+            if (index > 0) hover = hover.append(Component.newline());
+            hover = hover.append(lines.get(index));
+        }
+        return hover;
+    }
+
+    private boolean shouldAutoBuy(FavoriteFilter filter, MarketListing listing) {
+        return filter.autoBuy() && filter.maximumPrice() > 0
+                && listing.pricePerUnit() <= filter.maximumPrice();
+    }
+
+    private record NotificationGroup(boolean donate, FavoriteFilter filter) {
+    }
+
 
     public String filterLabel(FavoriteFilter filter) {
         String key = filter.hasEnchantment() ? "favorites.filter.enchantment" : switch (filter.type()) {
@@ -190,7 +330,7 @@ public final class FavoriteService {
 
     public String displayValue(FavoriteFilter filter) {
         if (filter.type() == FavoriteFilter.Type.NAME) return filter.value();
-        return ItemLocalization.getItemName(filter.value());
+        return plugin.itemLocalization().getItemName(filter.value());
     }
 
     public String enchantmentSummary(FavoriteFilter filter) {
@@ -198,30 +338,31 @@ public final class FavoriteService {
         return filter.enchantments().entrySet().stream().map(entry -> {
             NamespacedKey key = NamespacedKey.fromString(entry.getKey());
             Enchantment enchantment = key == null ? null : Enchantment.getByKey(key);
-            return ItemLocalization.getEnchantmentName(enchantment) + " " + entry.getValue();
+            return plugin.itemLocalization().getEnchantmentName(enchantment) + " " + entry.getValue();
         }).collect(java.util.stream.Collectors.joining(", "));
     }
 
-    private FavoriteFilter firstMatch(List<FavoriteFilter> filters, ItemStack item, String itemName) {
-        String itemKey = ItemLocalization.getItemKey(item);
+    private List<FavoriteFilter> matchingFilters(List<FavoriteFilter> filters, ItemStack item, String itemName) {
+        List<FavoriteFilter> matches = new ArrayList<>();
+        String itemKey = plugin.itemLocalization().getItemKey(item);
         for (FavoriteFilter filter : filters) {
             if (filter.type() == FavoriteFilter.Type.PRICE
                     && filter.hasEnchantment()
                     && item.getType().name().equalsIgnoreCase(filter.value())
-                    && matchesEnchantments(item, filter)) return filter;
+                    && matchesEnchantments(item, filter)) matches.add(filter);
         }
         for (FavoriteFilter filter : filters) {
             if (filter.type() == FavoriteFilter.Type.PRICE && !filter.hasEnchantment()
-                    && itemKey.equalsIgnoreCase(filter.value())) return filter;
+                    && itemKey.equalsIgnoreCase(filter.value())) matches.add(filter);
         }
         String normalizedName = normalize(itemName);
         for (FavoriteFilter filter : filters) {
             if (filter.type() == FavoriteFilter.Type.MATERIAL
-                    && item.getType().name().equalsIgnoreCase(filter.value())) return filter;
+                    && item.getType().name().equalsIgnoreCase(filter.value())) matches.add(filter);
             if (filter.type() == FavoriteFilter.Type.NAME
-                    && normalizedName.contains(normalize(filter.value()))) return filter;
+                    && normalizedName.contains(normalize(filter.value()))) matches.add(filter);
         }
-        return null;
+        return matches;
     }
 
     private boolean matchesEnchantments(ItemStack item, FavoriteFilter filter) {
@@ -242,11 +383,11 @@ public final class FavoriteService {
                           String value, double maximumPrice) {
         List<FavoriteFilter> values = mutableList(playerId, donate);
         if (values.stream().anyMatch(filter -> filter.type() == type
-                && filter.value().equalsIgnoreCase(value))) return AddResult.DUPLICATE;
-        int maximum = Math.max(1, plugin.getConfig().getInt("notifications.max-favorites", 100));
-        if (values.size() >= maximum) return AddResult.LIMIT;
-        values.add(new FavoriteFilter(UUID.randomUUID().toString(), type, value, maximumPrice));
-        save();
+                && filter.value().equalsIgnoreCase(value)
+                && (type != FavoriteFilter.Type.PRICE || !filter.hasEnchantment()))) return AddResult.DUPLICATE;
+        FavoriteFilter filter = new FavoriteFilter(UUID.randomUUID().toString(), type, value, maximumPrice);
+        storage.save(playerId, donate, filter);
+        values.add(filter);
         return AddResult.ADDED;
     }
 
@@ -254,7 +395,10 @@ public final class FavoriteService {
                                FavoriteFilter newFilter) {
         List<FavoriteFilter> values = mutableList(playerId, donate);
         int index = values.indexOf(oldFilter);
-        if (index >= 0) values.set(index, newFilter);
+        if (index >= 0) {
+            storage.save(playerId, donate, newFilter);
+            values.set(index, newFilter);
+        }
     }
 
     private List<FavoriteFilter> mutableList(UUID playerId, boolean donate) {
@@ -264,24 +408,38 @@ public final class FavoriteService {
 
     private void load() {
         favorites.clear();
-        if (!file.isFile()) return;
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-        ConfigurationSection players = yaml.getConfigurationSection("players");
-        if (players == null) return;
-        for (String uuidValue : players.getKeys(false)) {
-            try {
-                UUID playerId = UUID.fromString(uuidValue);
-                loadAuction(players.getConfigurationSection(uuidValue + ".vault"), playerId, false);
-                loadAuction(players.getConfigurationSection(uuidValue + ".donate"), playerId, true);
-            } catch (IllegalArgumentException ignored) {
-                // Invalid player entries are ignored.
-            }
-        }
+        storage.loadAll().forEach((playerId, auctions) -> auctions.forEach((donate, loaded) -> {
+            List<FavoriteFilter> values = mutableList(playerId, donate);
+            values.addAll(loaded);
+            deduplicateFilters(values);
+        }));
     }
 
-    private void loadAuction(ConfigurationSection section, UUID playerId, boolean donate) {
+    private void migrateLegacyFile() {
+        if (storage.isLegacyMigrationComplete()) return;
+        if (!legacyFile.isFile()) {
+            storage.markLegacyMigrationComplete();
+            return;
+        }
+        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(legacyFile);
+        ConfigurationSection players = yaml.getConfigurationSection("players");
+        if (players != null) {
+            for (String uuidValue : players.getKeys(false)) {
+                try {
+                    UUID playerId = UUID.fromString(uuidValue);
+                    migrateAuction(players.getConfigurationSection(uuidValue + ".vault"), playerId, false);
+                    migrateAuction(players.getConfigurationSection(uuidValue + ".donate"), playerId, true);
+                } catch (IllegalArgumentException ignored) {
+                    // Invalid player entries are ignored.
+                }
+            }
+        }
+        storage.markLegacyMigrationComplete();
+    }
+
+    private void migrateAuction(ConfigurationSection section, UUID playerId, boolean donate) {
         if (section == null) return;
-        List<FavoriteFilter> values = mutableList(playerId, donate);
+        List<FavoriteFilter> values = new ArrayList<>();
         for (String id : section.getKeys(false)) {
             String typeValue = section.getString(id + ".type", "");
             String value = section.getString(id + ".value", "");
@@ -295,62 +453,26 @@ public final class FavoriteService {
                 // Invalid filters do not prevent the plugin from starting.
             }
         }
-        mergeDuplicatePriceFilters(values);
+        deduplicateFilters(values);
+        values.forEach(filter -> storage.save(playerId, donate, filter));
     }
 
-    private void mergeDuplicatePriceFilters(List<FavoriteFilter> values) {
-        Map<String, FavoriteFilter> merged = new LinkedHashMap<>();
+    private void deduplicateFilters(List<FavoriteFilter> values) {
+        Map<String, FavoriteFilter> unique = new LinkedHashMap<>();
         List<FavoriteFilter> result = new ArrayList<>();
         for (FavoriteFilter filter : values) {
-            if (filter.type() != FavoriteFilter.Type.PRICE) {
-                result.add(filter);
-                continue;
-            }
-            String key = filter.value().toLowerCase(Locale.ROOT);
-            FavoriteFilter current = merged.get(key);
-            if (current == null) {
-                merged.put(key, filter);
-                continue;
-            }
-            Map<String, Integer> conditions = new LinkedHashMap<>(current.enchantments());
-            filter.enchantments().forEach((enchantment, level) ->
-                    conditions.merge(enchantment, level, Math::max));
-            double price = current.maximumPrice() > 0 && filter.maximumPrice() > 0
-                    ? Math.min(current.maximumPrice(), filter.maximumPrice())
-                    : Math.max(current.maximumPrice(), filter.maximumPrice());
-            merged.put(key, new FavoriteFilter(current.id(), current.type(), current.value(), price,
-                    current.enchantment(), current.enchantmentLevel()).withEnchantments(conditions));
+            String key = filter.type() + "|" + filter.value().toLowerCase(Locale.ROOT) + "|"
+                    + filter.enchantments().entrySet().stream().sorted(Map.Entry.comparingByKey())
+                    .map(entry -> entry.getKey() + "=" + entry.getValue()).collect(java.util.stream.Collectors.joining(";"));
+            unique.putIfAbsent(key, filter);
         }
-        result.addAll(merged.values());
+        result.addAll(unique.values());
         values.clear();
         values.addAll(result);
     }
 
-    private synchronized void save() {
-        YamlConfiguration yaml = new YamlConfiguration();
-        favorites.forEach((playerId, auctions) -> auctions.forEach((donate, filters) -> {
-            String auction = donate ? "donate" : "vault";
-            for (FavoriteFilter filter : filters) {
-                String path = "players." + playerId + "." + auction + "." + filter.id();
-                yaml.set(path + ".type", filter.type().name());
-                yaml.set(path + ".value", filter.value());
-                if (filter.type() == FavoriteFilter.Type.PRICE) {
-                    yaml.set(path + ".maximum-price", filter.maximumPrice());
-                    if (filter.hasEnchantment()) {
-                        yaml.set(path + ".enchantment", filter.enchantment());
-                        yaml.set(path + ".enchantment-level", filter.enchantmentLevel());
-                    }
-                }
-            }
-        }));
-        try {
-            if (!plugin.getDataFolder().isDirectory() && !plugin.getDataFolder().mkdirs()) {
-                throw new IOException("cannot create plugin data folder");
-            }
-            yaml.save(file);
-        } catch (IOException exception) {
-            plugin.getLogger().warning("Не удалось сохранить favorites.yml: " + exception.getMessage());
-        }
+    public synchronized void close() {
+        storage.close();
     }
 
     private static String normalize(String value) {
@@ -358,6 +480,6 @@ public final class FavoriteService {
     }
 
     public enum AddResult {
-        ADDED, UPDATED, DUPLICATE, LIMIT, INVALID
+        ADDED, UPDATED, DUPLICATE, INVALID
     }
 }

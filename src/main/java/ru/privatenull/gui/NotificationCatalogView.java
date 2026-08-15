@@ -6,6 +6,7 @@ import org.bukkit.inventory.*;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 final class NotificationCatalogView implements InventoryHolder {
     MarketGuiController controller;
@@ -18,6 +19,7 @@ final class NotificationCatalogView implements InventoryHolder {
     Map<Integer, String> slotToItemKey;
     Map<Integer, String> slotToCategory;
     Map<Integer, Enchantment> slotToEnchantment;
+    Map<String, Integer> draftEnchantments = new LinkedHashMap<>();
 
     enum Mode {
         ITEMS, CATEGORIES, ENCHANTMENTS

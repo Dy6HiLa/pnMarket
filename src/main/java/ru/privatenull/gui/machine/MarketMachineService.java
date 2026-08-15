@@ -49,11 +49,12 @@ public final class MarketMachineService implements Listener {
 
     private final PnMarketPlugin plugin;
     private final GuiOpenAnimationService animations;
-    private final GuiUpdateService updates = new GuiUpdateService();
+    private final GuiUpdateService updates;
 
     public MarketMachineService(PnMarketPlugin plugin) {
         this.plugin = plugin;
-        this.animations = new GuiOpenAnimationService(plugin);
+        this.updates = plugin.guiUpdates();
+        this.animations = new GuiOpenAnimationService(plugin, updates);
     }
 
     public void shutdown() {
@@ -152,13 +153,16 @@ public final class MarketMachineService implements Listener {
             return;
         }
         event.setCancelled(true);
+        if (animations.isAnimating(player)) return;
         if (!player.hasPermission("pnmarket.admin") || event.getRawSlot() < 0) return;
-        switch (view.screen) {
-            case MAIN -> handleMain(player, event, event.getRawSlot());
-            case LAYOUT -> handleLayout(player, event, event.getRawSlot());
-            case ROLE -> handleRole(player, event, view.selection, event.getRawSlot());
-            case ICONS -> handleIcons(player, event, event.getRawSlot());
-        }
+        plugin.withGuiTransition(player, event.getRawSlot(), () -> {
+            switch (view.screen) {
+                case MAIN -> handleMain(player, event, event.getRawSlot());
+                case LAYOUT -> handleLayout(player, event, event.getRawSlot());
+                case ROLE -> handleRole(player, event, view.selection, event.getRawSlot());
+                case ICONS -> handleIcons(player, event, event.getRawSlot());
+            }
+        });
     }
 
     @EventHandler
@@ -204,7 +208,7 @@ public final class MarketMachineService implements Listener {
         ItemStack cursor = event.getCursor();
         if (cursor == null || cursor.getType().isAir()) {
             player.sendMessage(ColorUtil.colorize("&#FC7165Положите нужный предмет на курсор."));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 1f);
+            plugin.playSound(player, "machine.error");
             return;
         }
         IconOption option = ICONS.get(index);
@@ -237,7 +241,7 @@ public final class MarketMachineService implements Listener {
             ItemStack cursor = event.getCursor();
             if (cursor == null || cursor.getType().isAir() || current.iconPath == null) {
                 player.sendMessage(ColorUtil.colorize("&#FC7165Для этой роли нужна настраиваемая иконка на курсоре."));
-                player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 1f);
+                plugin.playSound(player, "machine.error");
                 return;
             }
             replaceMaterial(current, cursor.getType());
@@ -250,7 +254,7 @@ public final class MarketMachineService implements Listener {
         assign(targetSlot, selected);
         save();
         openLayout(player);
-        player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.35f);
+        plugin.playSound(player, "machine.select");
     }
 
     private void assign(int slot, Role role) {
@@ -339,8 +343,9 @@ public final class MarketMachineService implements Listener {
         Inventory inventory = Bukkit.createInventory(view, size, ColorUtil.colorize(title));
         view.inventory = inventory;
         renderer.accept(inventory);
-        animations.open(player, inventory, true);
-        player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.2f);
+        animations.open(player, inventory, true, plugin.guiAnimationProfile(),
+                plugin.guiTransitionOrigin(player));
+        plugin.playSound(player, "machine.open");
     }
 
     private void fill(Inventory inventory) {

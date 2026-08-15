@@ -2,7 +2,6 @@ package ru.privatenull.command;
 
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.Sound;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -33,14 +32,16 @@ public final class AuctionCommand implements CommandExecutor {
         }
         if (args.length == 0) {
             plugin.openAuction(player, donate);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return true;
         }
         return switch (args[0].toLowerCase(Locale.ROOT)) {
             case "sell" -> sell(player, args);
             case "kit" -> kit(player, args);
             case "notify" -> notify(player, args);
+            case "delivery", "deliveries" -> delivery(player, args);
             case "search" -> search(player, args);
+            case "view" -> view(player, args);
             case "show", "snow" -> show(player, args);
             case "help", "?" -> help(player);
             default -> help(player);
@@ -90,9 +91,9 @@ public final class AuctionCommand implements CommandExecutor {
                 usage(player, donate ? "/dah search <название>" : "/ah search <название>");
                 return true;
             }
-            String query = MarketSearch.extractName(hand);
+            String query = MarketSearch.extractName(hand, plugin.itemLocalization());
             plugin.openAuctionSearch(player, query, donate);
-            player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, .20f, 1.4f);
+            plugin.playSound(player, "action.search");
             return true;
         }
         String query = String.join(" ", java.util.Arrays.copyOfRange(args, 1, args.length)).trim();
@@ -101,7 +102,25 @@ public final class AuctionCommand implements CommandExecutor {
             return true;
         }
         plugin.openAuctionSearch(player, query, donate);
-        player.playSound(player.getLocation(), Sound.BLOCK_NOTE_BLOCK_PLING, .20f, 1.4f);
+        plugin.playSound(player, "action.search");
+        return true;
+    }
+
+    private boolean delivery(Player player, String[] args) {
+        if (args.length != 1) {
+            usage(player, (donate ? "/dah" : "/ah") + " delivery");
+            return true;
+        }
+        plugin.openDeliveries(player);
+        return true;
+    }
+
+    private boolean view(Player player, String[] args) {
+        if (args.length != 2 || args[1].isBlank()) {
+            reject(player, plugin.messages().message("error.listing-unavailable"));
+            return true;
+        }
+        plugin.openListing(player, args[1], donate);
         return true;
     }
 
@@ -116,7 +135,7 @@ public final class AuctionCommand implements CommandExecutor {
             return true;
         }
         plugin.openSellerGui(player, target.getUniqueId(), donate);
-        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+        plugin.playSound(player, "gui.open");
         return true;
     }
 
@@ -128,7 +147,8 @@ public final class AuctionCommand implements CommandExecutor {
         player.sendMessage("§8  ▸ §e" + root + " sell <цена> §8— §fвыставить предмет из руки");
         player.sendMessage("§8  ▸ §e" + root + " sell auto §8— §fавтоматически рассчитать цену");
         player.sendMessage("§8  ▸ §e" + root + " kit <цена> [название] §8— §fвыставить набор");
-        player.sendMessage("§8  ▸ §e" + root + " notify §8— §fуведомления о снижении цены");
+        player.sendMessage("§8  ▸ §e" + root + " notify §8— §fуведомления о подходящих лотах");
+        player.sendMessage("§8  ▸ §e" + root + " delivery §8— §fзабрать доставки автопокупки");
         player.sendMessage("§8  ▸ §e" + root + " search <название> §8— §fнайти лот");
         player.sendMessage("§8  ▸ §e" + root + " show <игрок> §8— §fпосмотреть товары игрока");
         player.sendMessage("§8§m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -137,11 +157,11 @@ public final class AuctionCommand implements CommandExecutor {
 
     private void usage(Player player, String command) {
         player.sendMessage(plugin.messages().message("command.usage", Map.of("command", command)));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+        plugin.playSound(player, "error.default");
     }
 
     private void reject(Player player, String message) {
         player.sendMessage(message);
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+        plugin.playSound(player, "error.default");
     }
 }

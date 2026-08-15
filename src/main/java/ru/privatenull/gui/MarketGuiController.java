@@ -5,7 +5,6 @@ import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
-import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.inventory.Inventory;
@@ -18,7 +17,6 @@ import org.bukkit.potion.PotionData;
 import org.bukkit.potion.PotionType;
 import ru.privatenull.PnMarketPlugin;
 import ru.privatenull.currency.MarketPayment;
-import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.market.MarketFilter;
 import ru.privatenull.market.FavoriteFilter;
 import ru.privatenull.market.FavoriteService;
@@ -42,6 +40,9 @@ import ru.privatenull.pnlibrary.text.ColorUtil;
 
 import java.util.*;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.function.Consumer;
 
 public final class MarketGuiController {
@@ -113,7 +114,8 @@ public final class MarketGuiController {
     private final MarketSync sync;
     private final boolean donateAuction;
     private final GuiOpenAnimationService guiAnimations;
-    private final GuiUpdateService guiUpdates = new GuiUpdateService();
+    private final GuiUpdateService guiUpdates;
+    private final ExecutorService autoPurchaseQueue;
     private final Map<String, ItemStack> texturedHeadCache = new HashMap<>();
     private final List<NotificationEntry> notificationItems;
 
@@ -125,6 +127,8 @@ public final class MarketGuiController {
     final Map<UUID, FavoritesView> favoritesViews = new HashMap<>();
     final Map<UUID, NotificationCatalogView> notificationCatalogViews = new HashMap<>();
     private final Set<UUID> pendingPurchases = new HashSet<>();
+    private final Set<String> pendingAutomaticPurchases = new HashSet<>();
+    private final Map<String, Deque<AutoPurchaseRequest>> automaticQueues = new HashMap<>();
     private final Set<String> pendingListingActions = new HashSet<>();
 
     public MarketGuiController(PnMarketPlugin plugin, MarketStorage repository, MarketPayment payment,
@@ -140,33 +144,44 @@ public final class MarketGuiController {
         this.categories = categories;
         this.sync = sync;
         this.donateAuction = donateAuction;
-        this.guiAnimations = new GuiOpenAnimationService(plugin);
+        this.guiUpdates = plugin.guiUpdates();
+        this.guiAnimations = new GuiOpenAnimationService(plugin, guiUpdates);
+        this.autoPurchaseQueue = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, donateAuction
+                    ? "pnMarket-autobuy-donate" : "pnMarket-autobuy-regular");
+            thread.setDaemon(true);
+            return thread;
+        });
         this.notificationItems = loadNotificationItems();
     }
 
     public void shutdown() {
         guiAnimations.shutdown();
+        autoPurchaseQueue.shutdownNow();
         pendingPurchases.clear();
+        pendingAutomaticPurchases.clear();
+        automaticQueues.clear();
         pendingListingActions.clear();
     }
 
     private void openGui(Player player, Inventory inventory) {
         guiAnimations.cancel(player);
-        Object currentHolder = player.getOpenInventory().getTopInventory().getHolder();
-        if (currentHolder == inventory.getHolder()) {
-            player.openInventory(inventory);
-            return;
-        }
-        guiAnimations.open(player, inventory, true);
+        guiAnimations.open(player, inventory, true, plugin.guiAnimationProfile(),
+                plugin.guiTransitionOrigin(player));
     }
 
     private void animateRedraw(Player player, Inventory inventory) {
         guiAnimations.cancel(player);
-        guiAnimations.open(player, inventory, true);
+        guiAnimations.open(player, inventory, true, plugin.guiAnimationProfile(),
+                plugin.guiTransitionOrigin(player));
     }
 
     public void openAnimated(Player player, Inventory inventory) {
         openGui(player, inventory);
+    }
+
+    public boolean isAnimating(Player player) {
+        return guiAnimations.isAnimating(player);
     }
 
     private void setSlot(Inventory inventory, int slot, ItemStack item) {
@@ -448,7 +463,7 @@ public final class MarketGuiController {
 
         if (view.searchQuery != null && !view.searchQuery.isEmpty()) {
             String q = view.searchQuery.toLowerCase(Locale.ROOT);
-            filtered.removeIf(l -> !MarketSearch.matches(l, q));
+            filtered.removeIf(l -> !MarketSearch.matches(l, q, plugin.itemLocalization()));
         }
 
         if (!view.isSearch && !MarketCategories.ALL.equals(view.category)) {
@@ -561,7 +576,7 @@ public final class MarketGuiController {
                 if (isBundle(listing)) {
                     setDisplayName(meta, bundleDisplayName(listing));
                 } else if (!meta.hasDisplayName()) {
-                    setDisplayName(meta, ItemLocalization.getPlainName(listing.item()));
+                    setDisplayName(meta, plugin.itemLocalization().getPlainName(listing.item()));
                 }
                 List<String> lore = isBundle(listing)
                         ? new ArrayList<>()
@@ -859,13 +874,18 @@ public final class MarketGuiController {
                 continue;
             }
             NotificationEntry entry = entries.get(materialIndex);
-            FavoriteFilter subscribed = plugin.favorites().priceFilter(
+            List<FavoriteFilter> profiles = plugin.favorites().priceFilters(
                     player.getUniqueId(), donateAuction, entry.key());
+            FavoriteFilter subscribed = profiles.stream().filter(filter -> !filter.hasEnchantment())
+                    .findFirst().orElse(null);
             double lowest = lowestPrices.getOrDefault(entry.key(), 0D);
             Map<String, Object> replacements = Map.of(
                     "item", entry.name(),
                     "price", lowest > 0 ? formatPrice(lowest) : gui.text("favorites.catalog.no-price"),
-                    "status", subscribed == null
+                    "auto-buy", subscribed != null && subscribed.autoBuy()
+                            ? gui.text("favorites.auto-buy-enabled") : gui.text("favorites.auto-buy-disabled"),
+                    "profiles", profiles.size(),
+                    "status", profiles.isEmpty()
                             ? gui.text("favorites.catalog.not-subscribed")
                             : gui.text("favorites.catalog.subscribed"));
             ItemStack icon = createIcon(entry.icon(),
@@ -888,7 +908,7 @@ public final class MarketGuiController {
     }
 
     void handleNotificationCatalogClick(Player player, NotificationCatalogView view, int slot,
-                                        boolean leftClick, boolean rightClick) {
+                                        boolean leftClick, boolean rightClick, boolean shiftClick) {
         if (view.mode == NotificationCatalogView.Mode.CATEGORIES) {
             if (slot == 45) {
                 fillNotificationCatalog(player, view);
@@ -901,7 +921,7 @@ public final class MarketGuiController {
                 view.page = 0;
                 fillNotificationCatalog(player, view);
                 animateRedraw(player, view.inventory);
-                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.2f);
+                plugin.playSound(player, "gui.click-high");
             }
             return;
         }
@@ -913,6 +933,7 @@ public final class MarketGuiController {
             }
             Enchantment enchantment = view.slotToEnchantment.get(slot);
             if (enchantment != null) changeEnchantmentFilter(player, view, enchantment, leftClick, rightClick);
+            if (slot == 4 && !view.draftEnchantments.isEmpty()) saveEnchantmentProfile(player, view);
             return;
         }
         if (slot == 45) {
@@ -943,16 +964,45 @@ public final class MarketGuiController {
         }
         String itemKey = view.slotToItemKey.get(slot);
         if (itemKey == null) return;
-        Material material = ItemLocalization.getKeyMaterial(itemKey);
+        Material material = plugin.itemLocalization().getKeyMaterial(itemKey);
+        if (shiftClick && rightClick) {
+            plugin.requestAutoBuyPrice(player, itemKey, donateAuction);
+            return;
+        }
         if (rightClick) {
             view.selectedMaterial = material;
             view.selectedItemKey = itemKey;
+            view.draftEnchantments.clear();
             fillEnchantmentCatalog(player, view);
             animateRedraw(player, view.inventory);
             return;
         }
         FavoriteFilter existing = plugin.favorites().priceFilter(
                 player.getUniqueId(), donateAuction, itemKey);
+        if (shiftClick && leftClick) {
+            if (existing == null) {
+                double price = lowestPrice(itemKey);
+                if (price <= 0) {
+                    plugin.requestAutoBuyPrice(player, itemKey, donateAuction);
+                    return;
+                }
+                plugin.favorites().addPrice(player.getUniqueId(), donateAuction, itemKey, price);
+                existing = plugin.favorites().priceFilter(player.getUniqueId(), donateAuction, itemKey);
+            }
+            if (existing == null || !plugin.favorites().toggleAutoBuy(
+                    player.getUniqueId(), donateAuction, existing.id())) {
+                player.sendMessage(messages.message("notification.auto-buy-no-price"));
+                plugin.playSound(player, "error.default");
+            } else {
+                FavoriteFilter changed = plugin.favorites().priceFilter(
+                        player.getUniqueId(), donateAuction, itemKey);
+                player.sendMessage(messages.message(changed != null && changed.autoBuy()
+                        ? "notification.auto-buy-enabled" : "notification.auto-buy-disabled"));
+                plugin.playSound(player, "gui.click-high");
+            }
+            fillNotificationCatalog(player, view);
+            return;
+        }
         if (existing != null) {
             plugin.favorites().remove(player.getUniqueId(), donateAuction, existing.id());
             player.sendMessage(messages.message("notification.favorite-removed"));
@@ -961,12 +1011,11 @@ public final class MarketGuiController {
                     player.getUniqueId(), donateAuction, itemKey, lowestPrice(itemKey));
             switch (result) {
                 case ADDED, UPDATED -> player.sendMessage(messages.message("notification.favorite-added"));
-                case LIMIT -> player.sendMessage(messages.message("notification.favorite-limit"));
                 case INVALID -> player.sendMessage(messages.message("notification.favorite-invalid"));
                 case DUPLICATE -> player.sendMessage(messages.message("notification.favorite-duplicate"));
             }
         }
-        player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.2f);
+        plugin.playSound(player, "gui.click-high");
         fillNotificationCatalog(player, view);
     }
 
@@ -1003,16 +1052,11 @@ public final class MarketGuiController {
         int index = 0;
         for (Enchantment enchantment : enchantments) {
             if (index >= AUCTION_SLOTS.length) break;
-            FavoriteFilter filter = plugin.favorites().enchantmentFilter(
-                    player.getUniqueId(), donateAuction, material, enchantment);
-            int level = filter == null ? 0
-                    : filter.enchantments().getOrDefault(enchantment.getKey().toString(), 0);
-            FavoriteFilter profile = plugin.favorites().priceFilter(
-                    player.getUniqueId(), donateAuction, view.selectedItemKey);
-            boolean compatible = enchantmentsCompatible(enchantment, profile);
+            int level = view.draftEnchantments.getOrDefault(enchantment.getKey().toString(), 0);
+            boolean compatible = enchantmentsCompatible(enchantment, view.draftEnchantments);
             int slot = AUCTION_SLOTS[index++];
             Map<String, Object> replacements = Map.of(
-                    "enchantment", ItemLocalization.getEnchantmentName(enchantment),
+                    "enchantment", plugin.itemLocalization().getEnchantmentName(enchantment),
                     "level", level <= 0 ? gui.text("favorites.catalog.enchantments.disabled") : level,
                     "maximum", enchantment.getMaxLevel(),
                     "compatibility", level > 0
@@ -1026,23 +1070,21 @@ public final class MarketGuiController {
             setSlot(view.inventory, slot, icon);
             view.slotToEnchantment.put(slot, enchantment);
         }
-        FavoriteFilter profile = plugin.favorites().priceFilter(
-                player.getUniqueId(), donateAuction, view.selectedItemKey);
         List<String> selectedLore = new ArrayList<>(gui.lore("favorites.catalog.enchantments.selected.lore"));
-        if (profile != null && profile.hasEnchantment()) {
+        if (!view.draftEnchantments.isEmpty()) {
             selectedLore.add(gui.text("favorites.catalog.enchantments.selected.conditions-title"));
-            profile.enchantments().forEach((key, level) -> {
+            view.draftEnchantments.forEach((key, level) -> {
                 org.bukkit.NamespacedKey namespacedKey = org.bukkit.NamespacedKey.fromString(key);
                 Enchantment selected = namespacedKey == null ? null : Enchantment.getByKey(namespacedKey);
                 selectedLore.add(gui.text("favorites.catalog.enchantments.selected.condition", Map.of(
-                        "enchantment", ItemLocalization.getEnchantmentName(selected), "level", level)));
+                        "enchantment", plugin.itemLocalization().getEnchantmentName(selected), "level", level)));
             });
         } else {
             selectedLore.add(gui.text("favorites.catalog.enchantments.selected.no-conditions"));
         }
-        setSlot(view.inventory, 4, createIcon(ItemLocalization.createItem(view.selectedItemKey),
+        setSlot(view.inventory, 4, createIcon(plugin.itemLocalization().createItem(view.selectedItemKey),
                 gui.text("favorites.catalog.enchantments.selected.name",
-                        Map.of("item", ItemLocalization.getItemName(view.selectedItemKey))), selectedLore));
+                        Map.of("item", plugin.itemLocalization().getItemName(view.selectedItemKey))), selectedLore));
         setSlot(view.inventory, 45, gui.item("actions.back", Material.PLAYER_HEAD, Map.of()));
         if (enchantments.isEmpty()) {
             setSlot(view.inventory, 22, gui.item("favorites.catalog.enchantments.empty", Material.BARRIER, Map.of()));
@@ -1051,30 +1093,37 @@ public final class MarketGuiController {
 
     private void changeEnchantmentFilter(Player player, NotificationCatalogView view, Enchantment enchantment,
                                          boolean leftClick, boolean rightClick) {
-        FavoriteFilter current = plugin.favorites().enchantmentFilter(
-                player.getUniqueId(), donateAuction, view.selectedMaterial, enchantment);
-        int level = current == null ? 0
-                : current.enchantments().getOrDefault(enchantment.getKey().toString(), 0);
-        FavoriteFilter profile = plugin.favorites().priceFilter(
-                player.getUniqueId(), donateAuction, view.selectedItemKey);
-        if (leftClick && level <= 0 && !enchantmentsCompatible(enchantment, profile)) {
+        String key = enchantment.getKey().toString();
+        int level = view.draftEnchantments.getOrDefault(key, 0);
+        if (leftClick && level <= 0 && !enchantmentsCompatible(enchantment, view.draftEnchantments)) {
             player.sendMessage(messages.message("notification.enchantment-conflict", Map.of(
-                    "enchantment", ItemLocalization.getEnchantmentName(enchantment))));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, .8f);
+                    "enchantment", plugin.itemLocalization().getEnchantmentName(enchantment))));
+            plugin.playSound(player, "error.default");
             return;
         }
         if (leftClick) level++;
         if (rightClick) level--;
-        FavoriteService.AddResult result = plugin.favorites().setEnchantment(player.getUniqueId(), donateAuction,
-                view.selectedMaterial, enchantment, level, lowestPrice(view.selectedMaterial));
-        if (result == FavoriteService.AddResult.LIMIT) {
-            player.sendMessage(messages.message("notification.favorite-limit"));
-        } else {
-            player.sendMessage(messages.message(level <= 0
-                    ? "notification.favorite-removed" : "notification.favorite-added"));
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, level <= 0 ? .8f : 1.2f);
-        }
+        level = Math.min(level, enchantment.getMaxLevel());
+        if (level <= 0) view.draftEnchantments.remove(key);
+        else view.draftEnchantments.put(key, level);
+        plugin.playSound(player, level <= 0 ? "action.favorite-removed" : "action.favorite-added");
         fillEnchantmentCatalog(player, view);
+    }
+
+    private void saveEnchantmentProfile(Player player, NotificationCatalogView view) {
+        FavoriteService.AddResult result = plugin.favorites().addEnchantmentProfile(player.getUniqueId(),
+                donateAuction, view.selectedMaterial, view.draftEnchantments, lowestPrice(view.selectedMaterial));
+        player.sendMessage(messages.message(result == FavoriteService.AddResult.ADDED
+                ? "notification.favorite-added" : result == FavoriteService.AddResult.DUPLICATE
+                ? "notification.favorite-duplicate" : "notification.favorite-invalid"));
+        plugin.playSound(player, result == FavoriteService.AddResult.ADDED
+                ? "action.favorite-added" : "error.default");
+        if (result == FavoriteService.AddResult.ADDED) {
+            view.draftEnchantments.clear();
+            // The player can immediately assemble another independent profile for this material.
+            fillEnchantmentCatalog(player, view);
+            animateRedraw(player, view.inventory);
+        }
     }
 
     private List<Enchantment> availableEnchantments(Material material) {
@@ -1082,13 +1131,14 @@ public final class MarketGuiController {
         ItemStack item = new ItemStack(material);
         return Arrays.stream(Enchantment.values())
                 .filter(enchantment -> material == Material.ENCHANTED_BOOK || enchantment.canEnchantItem(item))
-                .sorted(Comparator.comparing(ItemLocalization::getEnchantmentName, String.CASE_INSENSITIVE_ORDER))
+                .sorted(Comparator.comparing(plugin.itemLocalization()::getEnchantmentName,
+                        String.CASE_INSENSITIVE_ORDER))
                 .toList();
     }
 
-    private boolean enchantmentsCompatible(Enchantment candidate, FavoriteFilter profile) {
-        if (candidate == null || profile == null || !profile.hasEnchantment()) return true;
-        for (String keyValue : profile.enchantments().keySet()) {
+    private boolean enchantmentsCompatible(Enchantment candidate, Map<String, Integer> enchantments) {
+        if (candidate == null || enchantments == null || enchantments.isEmpty()) return true;
+        for (String keyValue : enchantments.keySet()) {
             if (candidate.getKey().toString().equalsIgnoreCase(keyValue)) continue;
             org.bukkit.NamespacedKey key = org.bukkit.NamespacedKey.fromString(keyValue);
             Enchantment selected = key == null ? null : Enchantment.getByKey(key);
@@ -1105,8 +1155,8 @@ public final class MarketGuiController {
             if (!material.isAir() && material.isItem() && !material.name().startsWith("LEGACY_")
                     && !isPotionMaterial(material)) {
                 ItemStack item = new ItemStack(material);
-                entries.add(new NotificationEntry(ItemLocalization.getItemKey(item), item,
-                        ItemLocalization.getPlainName(item)));
+                entries.add(new NotificationEntry(plugin.itemLocalization().getItemKey(item), item,
+                        plugin.itemLocalization().getPlainName(item)));
             }
         }
         for (PotionType type : PotionType.values()) {
@@ -1128,8 +1178,8 @@ public final class MarketGuiController {
                 if (!(item.getItemMeta() instanceof org.bukkit.inventory.meta.PotionMeta meta)) continue;
                 meta.setBasePotionData(new PotionData(type, extended, upgraded));
                 item.setItemMeta(meta);
-                entries.add(new NotificationEntry(ItemLocalization.getItemKey(item), item,
-                        ItemLocalization.getPlainName(item)));
+                entries.add(new NotificationEntry(plugin.itemLocalization().getItemKey(item), item,
+                        plugin.itemLocalization().getPlainName(item)));
             } catch (IllegalArgumentException ignored) {
                 // Unsupported combinations are intentionally absent from the catalog.
             }
@@ -1145,7 +1195,7 @@ public final class MarketGuiController {
         Map<String, Double> prices = new HashMap<>();
         for (MarketListing listing : activeListings()) {
             double price = listing.pricePerUnit();
-            if (price > 0) prices.merge(ItemLocalization.getItemKey(listing.item()), price, Math::min);
+            if (price > 0) prices.merge(plugin.itemLocalization().getItemKey(listing.item()), price, Math::min);
         }
         return prices;
     }
@@ -1172,7 +1222,7 @@ public final class MarketGuiController {
             }
             FavoriteFilter filter = filters.get(index++);
             ItemStack favoriteIcon = filter.type() == FavoriteFilter.Type.NAME
-                    ? new ItemStack(Material.NAME_TAG) : ItemLocalization.createItem(filter.value());
+                    ? new ItemStack(Material.NAME_TAG) : plugin.itemLocalization().createItem(filter.value());
             String value = plugin.favorites().displayValue(filter);
             String key = filter.type().name().toLowerCase(Locale.ROOT);
             String type = gui.text("favorites.type." + key);
@@ -1183,7 +1233,9 @@ public final class MarketGuiController {
                     "enchantment", plugin.favorites().enchantmentSummary(filter),
                     "level", filter.enchantmentLevel(),
                     "price", filter.maximumPrice() > 0
-                            ? formatPrice(filter.maximumPrice()) : gui.text("favorites.catalog.no-price"));
+                            ? formatPrice(filter.maximumPrice()) : gui.text("favorites.catalog.no-price"),
+                    "auto-buy", filter.autoBuy()
+                            ? gui.text("favorites.auto-buy-enabled") : gui.text("favorites.auto-buy-disabled"));
             List<String> favoriteLore;
             if (filter.hasEnchantment()) {
                 favoriteLore = new ArrayList<>(gui.lore("favorites.enchantment.lore-top", placeholders));
@@ -1191,7 +1243,7 @@ public final class MarketGuiController {
                     org.bukkit.NamespacedKey namespacedKey = org.bukkit.NamespacedKey.fromString(enchantmentKey);
                     Enchantment enchantment = namespacedKey == null ? null : Enchantment.getByKey(namespacedKey);
                     favoriteLore.add(gui.text("favorites.enchantment.condition", Map.of(
-                            "enchantment", ItemLocalization.getEnchantmentName(enchantment), "level", level)));
+                            "enchantment", plugin.itemLocalization().getEnchantmentName(enchantment), "level", level)));
                 });
                 favoriteLore.addAll(gui.lore("favorites.enchantment.lore-bottom", placeholders));
             } else {
@@ -1213,7 +1265,7 @@ public final class MarketGuiController {
                 : gui.item("pagination.next-disabled", Material.PLAYER_HEAD, Map.of()));
     }
 
-    void handleFavoritesClick(Player player, FavoritesView view, int slot) {
+    void handleFavoritesClick(Player player, FavoritesView view, int slot, boolean shiftClick) {
         if (slot == 45) {
             favoritesViews.remove(player.getUniqueId());
             openNotificationCatalog(player, 0);
@@ -1235,8 +1287,28 @@ public final class MarketGuiController {
         }
         String id = view.slotToFavoriteId.get(slot);
         if (id == null) return;
+        if (shiftClick) {
+            FavoriteFilter current = plugin.favorites().list(player.getUniqueId(), donateAuction).stream()
+                    .filter(filter -> filter.id().equals(id)).findFirst().orElse(null);
+            if (current != null && current.type() == FavoriteFilter.Type.PRICE && current.maximumPrice() <= 0) {
+                plugin.requestAutoBuyPrice(player, current, donateAuction);
+                return;
+            }
+            if (plugin.favorites().toggleAutoBuy(player.getUniqueId(), donateAuction, id)) {
+                FavoriteFilter changed = plugin.favorites().list(player.getUniqueId(), donateAuction).stream()
+                        .filter(filter -> filter.id().equals(id)).findFirst().orElse(null);
+                player.sendMessage(messages.message(changed != null && changed.autoBuy()
+                        ? "notification.auto-buy-enabled" : "notification.auto-buy-disabled"));
+                plugin.playSound(player, "gui.click-high");
+                fillFavorites(player, view);
+            } else {
+                player.sendMessage(messages.message("notification.auto-buy-no-price"));
+                plugin.playSound(player, "error.default");
+            }
+            return;
+        }
         if (plugin.favorites().remove(player.getUniqueId(), donateAuction, id)) {
-            player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, .20f, 1.1f);
+            plugin.playSound(player, "action.favorite-deleted");
             fillFavorites(player, view);
         }
     }
@@ -1370,7 +1442,7 @@ public final class MarketGuiController {
         if (slot == SLOT_BACK_BOTTOM) {
             myItemsViews.remove(player.getUniqueId());
             openAuction(player);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         String id = view.slotToListingId.get(slot);
@@ -1380,7 +1452,7 @@ public final class MarketGuiController {
             player.sendMessage(messages.message("error.listing-unavailable"));
             setSlot(view.inventory, slot, null);
             view.slotToListingId.remove(slot);
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         if (rightClick && "EXPIRED".equalsIgnoreCase(listing.status())) {
@@ -1397,8 +1469,8 @@ public final class MarketGuiController {
             giveItemsOrDrop(player, deliveryItems(listing, listing.amount()));
             sync().listingRemoved(listing.id());
             player.sendMessage(messages.message("notification.collected", Map.of(
-                    "item", ItemLocalization.getPlainName(listing.item()))));
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_CLOSE, .20f, 1.1f);
+                    "item", plugin.itemLocalization().getPlainName(listing.item()))));
+            plugin.playSound(player, "action.item-collected");
             if (player.getOpenInventory().getTopInventory().equals(view.inventory)) {
                 setSlot(view.inventory, slot, null);
                 view.slotToListingId.remove(slot);
@@ -1414,7 +1486,7 @@ public final class MarketGuiController {
         List<ItemStack> contents = bundleItems(listing);
         if (contents.isEmpty()) {
             player.sendMessage(messages.message("error.listing-unavailable"));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
 
@@ -1425,7 +1497,7 @@ public final class MarketGuiController {
                 bundleDisplayName(listing));
         fillBundlePreview(player, view);
         openGui(player, view.inventory);
-        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+        plugin.playSound(player, "gui.open");
     }
 
     private void fillBundlePreview(Player player, BundlePreviewView view) {
@@ -1440,7 +1512,7 @@ public final class MarketGuiController {
             ItemMeta meta = display.getItemMeta();
             if (meta != null) {
                 if (!meta.hasDisplayName()) {
-                    setDisplayName(meta, ItemLocalization.getPlainName(display));
+                    setDisplayName(meta, plugin.itemLocalization().getPlainName(display));
                 }
                 applyListingDisplayFlags(meta);
                 display.setItemMeta(meta);
@@ -1476,7 +1548,94 @@ public final class MarketGuiController {
     void handleBundlePreviewClick(Player player, BundlePreviewView view, int slot) {
         if (slot != SLOT_BUNDLE_BACK) return;
         openAuction(player);
-        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.0f);
+        plugin.playSound(player, "gui.open-low");
+    }
+
+    public void openListing(Player player, String listingId) {
+        MarketListing listing = loadListingById(listingId);
+        if (listing == null) {
+            storageAsync(() -> repository.findById(listingId).orElse(null), fresh -> {
+                if (isPurchasableBy(player, fresh)) {
+                    sync().listingUpdated(fresh);
+                    openPurchaseGui(player, fresh);
+                } else {
+                    player.sendMessage(messages.message("error.listing-unavailable"));
+                    plugin.playSound(player, "error.default");
+                    refreshAllViews();
+                }
+            }, exception -> {
+                player.sendMessage(messages.message("error.listing-unavailable"));
+                plugin.playSound(player, "error.default");
+            });
+            return;
+        }
+        if (!isPurchasableBy(player, listing)) {
+            player.sendMessage(messages.message("error.listing-unavailable"));
+            plugin.playSound(player, "error.default");
+            refreshAllViews();
+            return;
+        }
+        openPurchaseGui(player, listing);
+    }
+
+    public void autoPurchase(UUID buyerId, MarketListing listing) {
+        String purchaseKey = buyerId + ":" + (listing == null ? "" : listing.id());
+        if (buyerId == null || listing == null || listing.amount() <= 0
+                || !"ACTIVE".equalsIgnoreCase(listing.status())
+                || listing.expiresAt() <= System.currentTimeMillis()
+                || listing.sellerId().equals(buyerId) || !pendingAutomaticPurchases.add(purchaseKey)) return;
+        sync().listingUpdated(listing);
+        Deque<AutoPurchaseRequest> queue = automaticQueues.computeIfAbsent(listing.id(), ignored -> new ArrayDeque<>());
+        queue.addLast(new AutoPurchaseRequest(buyerId, purchaseKey, listing));
+        if (queue.size() == 1) startNextAutomaticPurchase(listing.id());
+    }
+
+    private void startNextAutomaticPurchase(String listingId) {
+        Deque<AutoPurchaseRequest> queue = automaticQueues.get(listingId);
+        AutoPurchaseRequest request = queue == null ? null : queue.peekFirst();
+        if (request == null) return;
+        try {
+            autoPurchaseQueue.execute(() -> {
+                PurchaseReservation reservation;
+                try {
+                    reservation = repository.reserve(listingId, 1).orElse(null);
+                } catch (RuntimeException exception) {
+                    if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                        finishAllAutomatic(listingId);
+                        plugin.getLogger().warning("Не удалось зарезервировать автопокупку: "
+                                + exception.getMessage());
+                    });
+                    return;
+                }
+                if (plugin.isEnabled()) Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (reservation == null) finishAllAutomatic(listingId);
+                    else completeAutomaticPurchase(request.buyerId(), request.purchaseKey(), reservation);
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            finishAllAutomatic(listingId);
+        }
+    }
+
+    private void finishAutomatic(String purchaseKey, String listingId) {
+        pendingAutomaticPurchases.remove(purchaseKey);
+        Deque<AutoPurchaseRequest> queue = automaticQueues.get(listingId);
+        if (queue == null) return;
+        queue.pollFirst();
+        if (queue.isEmpty()) automaticQueues.remove(listingId);
+        else startNextAutomaticPurchase(listingId);
+    }
+
+    private void finishAllAutomatic(String listingId) {
+        Deque<AutoPurchaseRequest> queue = automaticQueues.remove(listingId);
+        if (queue != null) queue.forEach(request -> pendingAutomaticPurchases.remove(request.purchaseKey()));
+    }
+
+    private boolean isPurchasableBy(Player player, MarketListing listing) {
+        return player != null && player.isOnline() && listing != null && listing.amount() > 0
+                && "ACTIVE".equalsIgnoreCase(listing.status())
+                && listing.expiresAt() > System.currentTimeMillis()
+                && !listing.sellerId().equals(player.getUniqueId());
     }
 
     private void openPurchaseGui(Player player, MarketListing listing) {
@@ -1519,7 +1678,7 @@ public final class MarketGuiController {
 
         updateQuantityItems(pv);
         openGui(player, inv);
-        player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+        plugin.playSound(player, "gui.open");
     }
 
     private void decoratePurchase(Inventory inv) {
@@ -1570,41 +1729,41 @@ public final class MarketGuiController {
         if (slot == SLOT_BACK_TOP) {
             purchaseViews.remove(player.getUniqueId());
             openAuction(player);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         if (slot == SLOT_SELLER_HEAD) {
             purchaseViews.remove(player.getUniqueId());
             openSellerGui(player, pv.sellerId);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         if (slot == SLOT_MINUS_1) {
             pv.quantity -= 1;
             if (pv.quantity < 1) pv.quantity = 1;
             updateQuantityItems(pv);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.0f);
+            plugin.playSound(player, "gui.quantity-minus-one");
             return;
         }
         if (slot == SLOT_MINUS_10) {
             pv.quantity -= 10;
             if (pv.quantity < 1) pv.quantity = 1;
             updateQuantityItems(pv);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 0.9f);
+            plugin.playSound(player, "gui.quantity-minus-ten");
             return;
         }
         if (slot == SLOT_PLUS_1) {
             pv.quantity += 1;
             if (pv.quantity > pv.maxAmount) pv.quantity = pv.maxAmount;
             updateQuantityItems(pv);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.1f);
+            plugin.playSound(player, "gui.quantity-plus-one");
             return;
         }
         if (slot == SLOT_PLUS_10) {
             pv.quantity += 10;
             if (pv.quantity > pv.maxAmount) pv.quantity = pv.maxAmount;
             updateQuantityItems(pv);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.15f);
+            plugin.playSound(player, "gui.quantity-plus-ten");
             return;
         }
         if (slot == SLOT_BUY) {
@@ -1619,7 +1778,7 @@ public final class MarketGuiController {
             purchaseViews.remove(player.getUniqueId());
             player.closeInventory();
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         if (!"ACTIVE".equalsIgnoreCase(fresh.status())) {
@@ -1627,12 +1786,12 @@ public final class MarketGuiController {
             purchaseViews.remove(player.getUniqueId());
             player.closeInventory();
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         if (fresh.sellerId().equals(player.getUniqueId())) {
             player.sendMessage(messages.message("error.own-listing"));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         int requestedAmount = Math.min(pv.quantity, fresh.amount());
@@ -1641,24 +1800,24 @@ public final class MarketGuiController {
             purchaseViews.remove(player.getUniqueId());
             player.closeInventory();
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         double totalPrice = fresh.pricePerUnit() * requestedAmount;
         if (!payment.has(player, totalPrice)) {
             player.sendMessage(messages.message("error.insufficient-funds"));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         List<ItemStack> delivery = deliveryItems(fresh, requestedAmount);
         if (delivery.isEmpty()) {
             player.sendMessage(messages.message("error.listing-unavailable"));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         if (!canFitAll(player, delivery)) {
             player.sendMessage("§cНедостаточно места в инвентаре для покупки этого набора.");
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         UUID buyerId = player.getUniqueId();
@@ -1731,14 +1890,13 @@ public final class MarketGuiController {
             }
             plugin.notifySellerSale(player, fresh, totalPrice, donateAuction);
             if (seller.isOnline() && seller.getPlayer() != null) {
-                seller.getPlayer().playSound(seller.getPlayer().getLocation(),
-                        Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .20f, 1.4f);
+                plugin.playSound(seller.getPlayer(), "action.seller-sale");
             }
             giveItemsOrDrop(player, delivery);
             player.sendMessage(messages.message("notification.purchased", Map.of(
-                    "item", ItemLocalization.getPlainName(fresh.item()),
+                    "item", plugin.itemLocalization().getPlainName(fresh.item()),
                     "price", formatPrice(totalPrice))));
-            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, .20f, 1.25f);
+            plugin.playSound(player, "action.purchase");
             if (purchaseViews.get(buyerId) == pv) {
                 purchaseViews.remove(buyerId);
                 player.closeInventory();
@@ -1756,6 +1914,78 @@ public final class MarketGuiController {
         });
     }
 
+    private void completeAutomaticPurchase(UUID buyerId, String purchaseKey, PurchaseReservation reservation) {
+        MarketListing fresh = reservation.listing();
+        int toBuy = reservation.quantity();
+        double totalPrice = fresh.pricePerUnit() * toBuy;
+        List<ItemStack> delivery = deliveryItems(fresh, toBuy);
+        OfflinePlayer buyer = Bukkit.getOfflinePlayer(buyerId);
+        if (delivery.isEmpty() || !payment.withdraw(buyer, totalPrice)) {
+            plugin.queueNotification(buyerId, messages.message("notification.auto-buy-failed"));
+            rollbackAutomatic(reservation, purchaseKey);
+            return;
+        }
+        OfflinePlayer seller = Bukkit.getOfflinePlayer(fresh.sellerId());
+        double saleCommission = plugin.commissions().sale(seller, payment, totalPrice);
+        double sellerIncome = Math.max(0, totalPrice - saleCommission);
+        if (sellerIncome > 0 && !payment.deposit(seller, sellerIncome)) {
+            payment.deposit(buyer, totalPrice);
+            plugin.queueNotification(buyerId, messages.message("notification.auto-buy-failed"));
+            rollbackAutomatic(reservation, purchaseKey);
+            return;
+        }
+
+        storageAsync(() -> {
+            List<String> deliveryIds = plugin.deliveries().store(buyerId, delivery);
+            try {
+                repository.finalizeReservation(reservation);
+                return deliveryIds;
+            } catch (RuntimeException exception) {
+                plugin.deliveries().delete(buyerId, deliveryIds);
+                throw exception;
+            }
+        }, deliveryIds -> {
+            finishAutomatic(purchaseKey, fresh.id());
+            if (reservation.remainingAmount() == 0) sync().listingRemoved(fresh.id());
+            else sync().listingUpdated(fresh.withAmount(reservation.remainingAmount()));
+            String buyerName = buyer.getName() == null ? buyerId.toString() : buyer.getName();
+            plugin.notifySellerSale(buyerName, fresh, totalPrice, donateAuction);
+            if (seller.isOnline() && seller.getPlayer() != null) {
+                plugin.playSound(seller.getPlayer(), "action.seller-sale");
+            }
+            plugin.queueNotification(buyerId, messages.message("notification.auto-buy-purchased", Map.of(
+                    "item", plugin.itemLocalization().getPlainName(fresh.item()),
+                    "price", formatPrice(totalPrice))));
+            Player online = Bukkit.getPlayer(buyerId);
+            if (online != null && online.isOnline()) {
+                plugin.deliveries().deliverFitting(online);
+                plugin.playSound(online, "action.purchase");
+            }
+        }, exception -> {
+            boolean sellerRolledBack = sellerIncome <= 0 || payment.withdraw(seller, sellerIncome);
+            boolean buyerRefunded = payment.deposit(buyer, totalPrice);
+            plugin.getLogger().severe("Не удалось завершить автопокупку " + fresh.id()
+                    + "; rollback seller=" + sellerRolledBack + ", buyer=" + buyerRefunded
+                    + ": " + exception.getMessage());
+            plugin.queueNotification(buyerId, messages.message("notification.auto-buy-failed"));
+            rollbackAutomatic(reservation, purchaseKey);
+        });
+    }
+
+    private void rollbackAutomatic(PurchaseReservation reservation, String purchaseKey) {
+        storageAsync(() -> {
+            repository.rollbackReservation(reservation.listing().id(), reservation.quantity());
+            return Boolean.TRUE;
+        }, ignored -> finishAutomatic(purchaseKey, reservation.listing().id()), exception -> {
+            plugin.getLogger().severe("Не удалось откатить резерв автопокупки "
+                    + reservation.listing().id() + ": " + exception.getMessage());
+            finishAllAutomatic(reservation.listing().id());
+        });
+    }
+
+    private record AutoPurchaseRequest(UUID buyerId, String purchaseKey, MarketListing listing) {
+    }
+
     private void rollbackReservationAsync(PurchaseReservation reservation) {
         storageAsync(() -> {
             repository.rollbackReservation(reservation.listing().id(), reservation.quantity());
@@ -1770,7 +2000,7 @@ public final class MarketGuiController {
             OfflinePlayer seller = Bukkit.getOfflinePlayer(sellerId);
             String sellerName = seller.getName() != null ? seller.getName() : sellerId.toString();
             viewer.sendMessage(messages.message("error.seller-empty", Map.of("seller", sellerName)));
-            viewer.playSound(viewer.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(viewer, "error.default");
             return;
         }
         SellerView sv = new SellerView();
@@ -1811,7 +2041,7 @@ public final class MarketGuiController {
         if (slot == 45) {
             sellerViews.remove(player.getUniqueId());
             openAuction(player);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
 
@@ -1820,7 +2050,7 @@ public final class MarketGuiController {
             if (leftClick) sv.sort = MarketFilter.nextSort(sv.sort);
             else if (rightClick) sv.sort = MarketFilter.prevSort(sv.sort);
             fillSellerInventory(sv);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.0f);
+            plugin.playSound(player, "gui.click");
             return;
         }
 
@@ -1834,13 +2064,13 @@ public final class MarketGuiController {
             setSlot(sv.inventory, slot, null);
             sv.slotToListingId.remove(slot);
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
 
         if (listing.sellerId().equals(player.getUniqueId())) {
             player.sendMessage(messages.message("error.own-listing"));
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
 
@@ -1861,7 +2091,7 @@ public final class MarketGuiController {
         }
         hideAttributes(barrier);
         inv.setItem(slot, barrier);
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.7f);
+        plugin.playSound(player, "error.no-money");
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -1877,31 +2107,31 @@ public final class MarketGuiController {
         if (slot == layout.auctionSwitch()) {
             if (view.isSearch) openAuction(player);
             else plugin.openAuction(player, !donateAuction);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         if (slot == layout.myItems()) {
             openMyItems(player);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         if (slot == layout.favorites()) {
             openNotificationCatalog(player, 0);
-            player.playSound(player.getLocation(), Sound.BLOCK_CHEST_OPEN, .20f, 1.1f);
+            plugin.playSound(player, "gui.open");
             return;
         }
         if (slot == layout.previous()) {
             if (view.page > 0) {
                 view.page--;
                 fillAuctionInventory(player, view);
-                player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 0.95f);
+                plugin.playSound(player, "gui.page-previous");
             }
             return;
         }
         if (slot == layout.next()) {
             view.page++;
             fillAuctionInventory(player, view);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.05f);
+            plugin.playSound(player, "gui.page-next");
             return;
         }
         if (slot == layout.category() && !view.isSearch) {
@@ -1912,7 +2142,7 @@ public final class MarketGuiController {
             }
             view.page = 0;
             fillAuctionInventory(player, view);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.0f);
+            plugin.playSound(player, "gui.click");
             return;
         }
 
@@ -1925,7 +2155,7 @@ public final class MarketGuiController {
             }
             view.page = 0;
             fillAuctionInventory(player, view);
-            player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, .20f, 1.0f);
+            plugin.playSound(player, "gui.click");
             return;
         }
 
@@ -1935,13 +2165,13 @@ public final class MarketGuiController {
         if (listing == null || listing.amount() <= 0) {
             player.sendMessage(messages.message("error.listing-unavailable"));
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         if (!"ACTIVE".equalsIgnoreCase(listing.status())) {
             player.sendMessage(messages.message("error.listing-unavailable"));
             refreshAllViews();
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         UUID viewerId = player.getUniqueId();
@@ -1963,7 +2193,7 @@ public final class MarketGuiController {
                     view.slotToListingId.remove(slot);
                 }
                 player.sendMessage(messages.message("success.listing-returned"));
-                player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, .20f, 1.3f);
+                plugin.playSound(player, "action.listing-returned");
             }, exception -> {
                 pendingListingActions.remove(actionKey);
                 plugin.getLogger().warning("Не удалось вернуть лот " + listing.id() + ": " + exception.getMessage());

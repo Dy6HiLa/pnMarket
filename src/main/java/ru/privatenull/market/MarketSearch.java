@@ -2,8 +2,8 @@ package ru.privatenull.market;
 
 import org.bukkit.ChatColor;
 import org.bukkit.inventory.ItemStack;
-import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.model.MarketListing;
+import ru.privatenull.pnlibrary.localization.ItemLocalization;
 import ru.privatenull.util.NumberParser;
 
 import java.util.ArrayList;
@@ -18,15 +18,15 @@ public final class MarketSearch {
     private MarketSearch() {
     }
 
-    public static String extractName(MarketListing listing) {
+    public static String extractName(MarketListing listing, ItemLocalization localization) {
         if (listing == null || listing.item() == null) return null;
-        return extractName(listing.item());
+        return extractName(listing.item(), localization);
     }
 
-    public static String extractName(ItemStack item) {
-        if (item == null) return null;
+    public static String extractName(ItemStack item, ItemLocalization localization) {
+        if (item == null || localization == null) return null;
 
-        String fromLocalization = ItemLocalization.getPlainName(item);
+        String fromLocalization = localization.getPlainName(item);
         if (fromLocalization != null && !fromLocalization.isEmpty()) {
             String stripped = ChatColor.stripColor(fromLocalization).trim();
             if (!stripped.isEmpty()) {
@@ -39,7 +39,7 @@ public final class MarketSearch {
         return Character.toUpperCase(mat.charAt(0)) + mat.substring(1);
     }
 
-    public static boolean matches(MarketListing listing, String query) {
+    public static boolean matches(MarketListing listing, String query, ItemLocalization localization) {
         if (query == null || query.isEmpty()) return true;
         if (listing == null || listing.item() == null) return false;
 
@@ -54,7 +54,7 @@ public final class MarketSearch {
             // A normal text query continues through localized name and material matching.
         }
 
-        String name = extractName(listing);
+        String name = extractName(listing, localization);
         if (name != null && name.toLowerCase(Locale.ROOT).contains(q)) {
             return true;
         }
@@ -63,12 +63,13 @@ public final class MarketSearch {
         return mat.contains(q);
     }
 
-    public static List<String> tabComplete(Collection<MarketListing> listings, String prefix) {
+    public static List<String> tabComplete(Collection<MarketListing> listings, String prefix,
+                                           ItemLocalization localization) {
         String p = prefix == null ? "" : prefix.toLowerCase(Locale.ROOT);
         Set<String> result = new LinkedHashSet<>();
         for (MarketListing listing : listings) {
             if (listing == null || listing.item() == null) continue;
-            String name = extractName(listing);
+            String name = extractName(listing, localization);
             if (name == null) continue;
             String lower = name.toLowerCase(Locale.ROOT);
             if (lower.startsWith(p)) {

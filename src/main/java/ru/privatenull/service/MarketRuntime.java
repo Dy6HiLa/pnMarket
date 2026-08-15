@@ -1,6 +1,5 @@
 package ru.privatenull.service;
 
-import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import ru.privatenull.PnMarketPlugin;
 import ru.privatenull.config.*;
@@ -34,7 +33,7 @@ public final class MarketRuntime implements AutoCloseable {
         this.gui = gui;
         this.labels = labels;
         this.currencies = new CurrencyRegistry(plugin);
-        this.storageFactory = new MarketStorageFactory(plugin);
+        this.storageFactory = plugin.storageFactory();
     }
 
     public boolean start() {
@@ -92,7 +91,7 @@ public final class MarketRuntime implements AutoCloseable {
         MarketGuiController controller = gui(donate);
         if (controller == null) {
             player.sendMessage("§cАукцион недоступен: настроенная валюта не найдена.");
-            player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, 0.8f);
+            plugin.playSound(player, "error.default");
             return;
         }
         controller.openAuction(player);
@@ -120,6 +119,17 @@ public final class MarketRuntime implements AutoCloseable {
         MarketGuiController controller = gui(donate);
         if (controller != null) controller.openNotificationCatalog(player, 0);
         else openAuction(player, donate);
+    }
+
+    public void openListing(Player player, String listingId, boolean donate) {
+        MarketGuiController controller = gui(donate);
+        if (controller != null) controller.openListing(player, listingId);
+        else openAuction(player, donate);
+    }
+
+    public void autoPurchase(UUID playerId, MarketListing listing, boolean donate) {
+        MarketGuiController controller = gui(donate);
+        if (controller != null) controller.autoPurchase(playerId, listing);
     }
 
     public void renderAll() {
@@ -179,6 +189,7 @@ public final class MarketRuntime implements AutoCloseable {
     @Override
     public void close() {
         shutdownViews();
+        if (favorites != null) favorites.close();
         if (regularStorage != null) regularStorage.close();
         if (donateStorage != null) donateStorage.close();
     }

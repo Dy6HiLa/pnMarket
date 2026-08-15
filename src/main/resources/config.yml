@@ -1,7 +1,9 @@
 # ХРАНИЛИЩЕ
 storage:
-  type: sqlite # sqlite, mysql или mongo
-  sqlite: { file: "market.db" }
+  type: sqlite # sqlite, mysql, mongo или redis; смена требует полного рестарта
+  sqlite:
+    file: "market.db"
+    connection-timeout-ms: 10000
   mysql:
     url: ""
     host: localhost
@@ -9,10 +11,20 @@ storage:
     database: minecraft
     username: root
     password: ""
+    parameters: "useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=UTC"
+    pool-size: 10
+    connection-timeout-ms: 10000
   mongo:
     uri: "mongodb://localhost:27017"
     database: minecraft
     collection: auction
+  redis:
+    uri: "redis://localhost:6379/0"
+    namespace: "pnmarket"
+
+# ЛОКАЛИЗАЦИЯ ПРЕДМЕТОВ (ru_ru или en_us)
+localization:
+  locale: ru_ru
 
 # ВАЛЮТА (type: vault, playerpoints или excellent)
 currency:
@@ -20,12 +32,17 @@ currency:
     enabled: true
     type: vault
     format: "&a{amount}⛃"
-    excellent-id: coins
   donate:
     enabled: true
     type: playerpoints
     format: "&d{amount} PP"
-    excellent-id: points
+
+# Только для type: excellent укажите ID валюты из ExcellentEconomy:
+# currency:
+#   default:
+#     type: excellent
+#     excellent:
+#       id: coins
 
 # ЦЕНЫ
 price:
@@ -84,5 +101,3 @@ sell:
 # УВЕДОМЛЕНИЯ
 notifications:
   enabled: true
-  max-favorites: 100 # Лимит уведомлений
-  max-pending: 50   # Лимит очереди

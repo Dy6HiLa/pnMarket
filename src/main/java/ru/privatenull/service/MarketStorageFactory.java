@@ -1,56 +1,88 @@
 package ru.privatenull.service;
 
-import org.bukkit.configuration.file.FileConfiguration;
 import ru.privatenull.PnMarketPlugin;
+import ru.privatenull.pnlibrary.database.DatabaseRouter;
 import ru.privatenull.storage.*;
 
-import java.io.File;
-import java.util.Locale;
-
-public final class MarketStorageFactory {
+/** Routes every pnMarket repository through one shared pnLibrary backend. */
+public final class MarketStorageFactory implements AutoCloseable {
     private final PnMarketPlugin plugin;
+    private final DatabaseRouter router;
+    private JdbcMarketRepository jdbcRegular;
+    private JdbcMarketRepository jdbcDonate;
+    private MarketRepository mongoRegular;
+    private MarketRepository mongoDonate;
+    private RedisMarketStorage redisRegular;
+    private RedisMarketStorage redisDonate;
 
     public MarketStorageFactory(PnMarketPlugin plugin) {
         this.plugin = plugin;
+        this.router = DatabaseRouter.from(plugin.getConfig().getConfigurationSection("storage"),
+                plugin.getDataFolder());
     }
 
     public MarketStorage open(boolean donate) {
-        FileConfiguration config = plugin.getConfig();
-        String type = config.getString("storage.type", "sqlite").toLowerCase(Locale.ROOT);
-        return switch (type) {
-            case "sqlite" -> sqlite(config, donate);
-            case "mysql" -> mysql(config, donate);
-            case "mongodb", "mongo" -> mongo(config, donate);
-            default -> throw new IllegalArgumentException("Неизвестный тип хранилища: " + type);
-        };
+        return router.route(
+                jdbc -> jdbc(donate),
+                mongo -> mongo(donate),
+                redis -> redis(donate));
     }
 
-    private MarketStorage sqlite(FileConfiguration config, boolean donate) {
-        File database = new File(plugin.getDataFolder(), config.getString("storage.sqlite.file", "market.db"));
-        return new JdbcMarketRepository("org.sqlite.JDBC", "jdbc:sqlite:" + database.getAbsolutePath(),
-                null, null, legacyExpiry(), plugin.getLogger(), table(donate));
+    public MarketStorage openNotifications() {
+        return router.route(
+                jdbc -> jdbc(false),
+                mongo -> mongo(false),
+                redis -> redis(false));
     }
 
-    private MarketStorage mysql(FileConfiguration config, boolean donate) {
-        String url = config.getString("storage.mysql.url", "");
-        if (url == null || url.isBlank()) {
-            url = "jdbc:mysql://" + config.getString("storage.mysql.host", "localhost") + ":"
-                    + config.getInt("storage.mysql.port", 3306) + "/"
-                    + config.getString("storage.mysql.database", "minecraft")
-                    + "?useUnicode=true&characterEncoding=utf8&useSSL=false";
+    public MarketStorage openFavorites() {
+        return router.route(
+                jdbc -> jdbc(false),
+                mongo -> mongo(false),
+                redis -> redis(false));
+    }
+
+    public MarketStorage openDeliveries() {
+        return router.route(
+                jdbc -> jdbc(false),
+                mongo -> mongo(false),
+                redis -> redis(false));
+    }
+
+    public DatabaseRouter router() {
+        return router;
+    }
+
+    private RedisMarketStorage redis(boolean donate) {
+        if (donate) {
+            if (redisDonate == null) redisDonate = new RedisMarketStorage(router.redis(), true);
+            return redisDonate;
         }
-        return new JdbcMarketRepository("com.mysql.cj.jdbc.Driver", url,
-                config.getString("storage.mysql.username", "root"),
-                config.getString("storage.mysql.password", ""), legacyExpiry(),
-                plugin.getLogger(), table(donate));
+        if (redisRegular == null) redisRegular = new RedisMarketStorage(router.redis(), false);
+        return redisRegular;
     }
 
-    private MarketStorage mongo(FileConfiguration config, boolean donate) {
-        String uri = System.getenv("PNMARKET_MONGO_URI");
-        if (uri == null || uri.isBlank()) uri = config.getString("storage.mongo.uri", "mongodb://localhost:27017");
-        String collection = config.getString("storage.mongo.collection", "auction") + (donate ? "_donate" : "");
-        return new MarketRepository(uri, config.getString("storage.mongo.database", "minecraft"),
-                collection, legacyExpiry(), plugin.getLogger());
+    private JdbcMarketRepository jdbc(boolean donate) {
+        if (donate) {
+            if (jdbcDonate == null) jdbcDonate = new JdbcMarketRepository(
+                    router.jdbc(), legacyExpiry(), plugin.getLogger(), table(true));
+            return jdbcDonate;
+        }
+        if (jdbcRegular == null) jdbcRegular = new JdbcMarketRepository(
+                router.jdbc(), legacyExpiry(), plugin.getLogger(), table(false));
+        return jdbcRegular;
+    }
+
+    private MarketRepository mongo(boolean donate) {
+        String base = router.mongo().settings().collection();
+        if (donate) {
+            if (mongoDonate == null) mongoDonate = new MarketRepository(router.mongo().database(),
+                    base + "_donate", base, legacyExpiry(), plugin.getLogger());
+            return mongoDonate;
+        }
+        if (mongoRegular == null) mongoRegular = new MarketRepository(router.mongo().database(),
+                base, base, legacyExpiry(), plugin.getLogger());
+        return mongoRegular;
     }
 
     private String table(boolean donate) {
@@ -59,5 +91,10 @@ public final class MarketStorageFactory {
 
     private long legacyExpiry() {
         return 86_400_000L;
+    }
+
+    @Override
+    public void close() {
+        router.close();
     }
 }

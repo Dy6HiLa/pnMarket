@@ -24,11 +24,11 @@ public final class AuctionTabCompleter implements TabCompleter {
                                                  @NotNull String alias, @NotNull String[] args) {
         if (!(sender instanceof Player)) return List.of();
         if (args.length == 1) {
-            return filter(List.of("sell", "kit", "notify", "search", "show", "help"), args[0]);
+            return filter(List.of("sell", "kit", "notify", "delivery", "search", "show", "help"), args[0]);
         }
         String action = args[0].toLowerCase(Locale.ROOT);
         if (args.length == 2 && action.equals("search")) {
-            return MarketSearch.tabComplete(plugin.activeListings(donate), args[1]);
+            return MarketSearch.tabComplete(plugin.activeListings(donate), args[1], plugin.itemLocalization());
         }
         if (args.length == 2 && action.equals("sell")) return filter(List.of("auto"), args[1]);
         if (args.length == 2 && (action.equals("show") || action.equals("snow"))) {

@@ -7,6 +7,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import ru.privatenull.PnMarketPlugin;
@@ -24,52 +25,81 @@ public final class MarketInventoryListener implements Listener {
         Inventory top = event.getView().getTopInventory();
         Inventory clicked = event.getClickedInventory();
         if (clicked == null) return;
+        if (isAnimating(top, player)) {
+            event.setCancelled(true);
+            return;
+        }
 
         if (top.getHolder() instanceof BundlePreviewView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handleBundlePreviewClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) withTransition(player, event.getRawSlot(),
+                    () -> view.controller.handleBundlePreviewClick(player, view, event.getRawSlot()));
             return;
         }
         if (top.getHolder() instanceof BundleCreateView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handleBundleCreateClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) withTransition(player, event.getRawSlot(),
+                    () -> view.controller.handleBundleCreateClick(player, view, event.getRawSlot()));
             return;
         }
         if (top.getHolder() instanceof FavoritesView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handleFavoritesClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) withTransition(player, event.getRawSlot(), () -> view.controller.handleFavoritesClick(
+                    player, view, event.getRawSlot(), event.isShiftClick()));
             return;
         }
         if (top.getHolder() instanceof NotificationCatalogView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handleNotificationCatalogClick(
-                    player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+            if (clicked.equals(top)) withTransition(player, event.getRawSlot(), () ->
+                    view.controller.handleNotificationCatalogClick(player, view, event.getRawSlot(),
+                            event.isLeftClick(), event.isRightClick(), event.isShiftClick()));
             return;
         }
         if (top.getHolder() instanceof MyItemsView view) {
             event.setCancelled(true);
             if (clicked.equals(top)) {
-                view.controller.handleMyItemsClick(player, view, event.getRawSlot(), event.isRightClick());
+                withTransition(player, event.getRawSlot(), () ->
+                        view.controller.handleMyItemsClick(player, view, event.getRawSlot(), event.isRightClick()));
             }
             return;
         }
         if (top.getHolder() instanceof SellerView view) {
             event.setCancelled(true);
             if (clicked.equals(top)) {
-                view.controller.handleSellerClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+                withTransition(player, event.getRawSlot(), () -> view.controller.handleSellerClick(
+                        player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick()));
             }
             return;
         }
         if (top.getHolder() instanceof PurchaseView view) {
             event.setCancelled(true);
-            if (clicked.equals(top)) view.controller.handlePurchaseClick(player, view, event.getRawSlot());
+            if (clicked.equals(top)) withTransition(player, event.getRawSlot(),
+                    () -> view.controller.handlePurchaseClick(player, view, event.getRawSlot()));
             return;
         }
         if (top.getHolder() instanceof AuctionView view) {
             event.setCancelled(true);
             if (!player.getUniqueId().equals(view.viewer) || !clicked.equals(top)) return;
-            view.controller.handleAuctionClick(player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick());
+            withTransition(player, event.getRawSlot(), () -> view.controller.handleAuctionClick(
+                    player, view, event.getRawSlot(), event.isLeftClick(), event.isRightClick()));
         }
+    }
+
+    private boolean isAnimating(Inventory top, Player player) {
+        Object holder = top.getHolder();
+        if (holder instanceof AuctionView view) return view.controller.isAnimating(player);
+        if (holder instanceof PurchaseView view) return view.controller.isAnimating(player);
+        if (holder instanceof SellerView view) return view.controller.isAnimating(player);
+        if (holder instanceof MyItemsView view) return view.controller.isAnimating(player);
+        if (holder instanceof BundlePreviewView view) return view.controller.isAnimating(player);
+        if (holder instanceof BundleCreateView view) return view.controller.isAnimating(player);
+        if (holder instanceof FavoritesView view) return view.controller.isAnimating(player);
+        if (holder instanceof NotificationCatalogView view) return view.controller.isAnimating(player);
+        return false;
+    }
+
+    private void withTransition(Player player, int sourceSlot, Runnable action) {
+        plugin.withGuiTransition(player, sourceSlot, action);
     }
 
     @EventHandler
@@ -109,6 +139,11 @@ public final class MarketInventoryListener implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         plugin.removeViewer(event.getPlayer().getUniqueId());
+    }
+
+    @EventHandler
+    public void onLogin(PlayerLoginEvent event) {
+        plugin.prepareJoinNotifications(event.getPlayer());
     }
 
     @EventHandler

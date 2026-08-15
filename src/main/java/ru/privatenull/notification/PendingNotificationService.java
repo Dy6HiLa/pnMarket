@@ -1,70 +1,96 @@
 package ru.privatenull.notification;
 
-import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import ru.privatenull.PnMarketPlugin;
+import ru.privatenull.service.MarketStorageFactory;
+import ru.privatenull.storage.MarketStorage;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 /** Durable chat notifications delivered on the player's next join. */
-public final class PendingNotificationService {
+public final class PendingNotificationService implements AutoCloseable {
     private final PnMarketPlugin plugin;
-    private final File file;
-    private final Map<UUID, List<String>> pending = new LinkedHashMap<>();
+    private final MarketStorage storage;
+    private final ExecutorService executor;
 
     public PendingNotificationService(PnMarketPlugin plugin) {
         this.plugin = plugin;
-        this.file = new File(plugin.getDataFolder(), "pending-notifications.yml");
-        load();
+        this.storage = plugin.storageFactory().openNotifications();
+        this.executor = Executors.newSingleThreadExecutor(task -> {
+            Thread thread = new Thread(task, "pnMarket-notifications");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
-    public synchronized void queue(UUID playerId, String message) {
+    public void queue(UUID playerId, String message) {
         if (playerId == null || message == null || message.isBlank()) return;
-        int maximum = Math.max(1, plugin.getConfig().getInt("notifications.max-pending", 50));
-        List<String> messages = pending.computeIfAbsent(playerId, ignored -> new ArrayList<>());
-        if (messages.size() >= maximum) messages.remove(0);
-        messages.add(message);
-        save();
+        submit(() -> {
+            try {
+                storage.queue(playerId, message);
+            } catch (RuntimeException exception) {
+                plugin.getLogger().warning("Не удалось сохранить отложенное уведомление: "
+                        + exception.getMessage());
+            }
+        });
     }
 
-    public synchronized void deliver(Player player) {
-        List<String> messages = pending.remove(player.getUniqueId());
-        if (messages == null || messages.isEmpty()) return;
-        save();
-        player.sendMessage(plugin.messages().message("notification.offline-summary",
-                Map.of("amount", messages.size())));
+    public void deliver(Player player) {
+        UUID playerId = player.getUniqueId();
+        submit(() -> {
+            List<String> messages;
+            try {
+                messages = storage.takeAll(playerId);
+            } catch (RuntimeException exception) {
+                plugin.getLogger().warning("Не удалось получить отложенные уведомления: "
+                        + exception.getMessage());
+                return;
+            }
+            if (messages.isEmpty()) return;
+            try {
+                Bukkit.getScheduler().runTask(plugin, () -> deliver(player, messages));
+            } catch (RuntimeException exception) {
+                requeue(playerId, messages);
+            }
+        });
+    }
+
+    private void deliver(Player player, List<String> messages) {
+        if (!player.isOnline()) {
+            UUID playerId = player.getUniqueId();
+            submit(() -> requeue(playerId, messages));
+            return;
+        }
         messages.forEach(player::sendMessage);
     }
 
-    private void load() {
-        if (!file.isFile()) return;
-        YamlConfiguration yaml = YamlConfiguration.loadConfiguration(file);
-        for (String key : yaml.getKeys(false)) {
-            try {
-                UUID id = UUID.fromString(key);
-                List<String> messages = yaml.getStringList(key);
-                if (!messages.isEmpty()) pending.put(id, new ArrayList<>(messages));
-            } catch (IllegalArgumentException ignored) {
-            }
+    @Override
+    public void close() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) executor.shutdownNow();
+        } catch (InterruptedException exception) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        storage.close();
+    }
+
+    private void submit(Runnable task) {
+        try {
+            executor.execute(task);
+        } catch (RejectedExecutionException ignored) {
+            // The plugin is already shutting down.
         }
     }
 
-    private void save() {
-        YamlConfiguration yaml = new YamlConfiguration();
-        pending.forEach((id, messages) -> yaml.set(id.toString(), messages));
-        try {
-            if (!plugin.getDataFolder().isDirectory() && !plugin.getDataFolder().mkdirs()) {
-                throw new IOException("cannot create plugin data folder");
-            }
-            yaml.save(file);
-        } catch (IOException exception) {
-            plugin.getLogger().warning("Не удалось сохранить отложенные уведомления: " + exception.getMessage());
-        }
+    private void requeue(UUID playerId, List<String> messages) {
+        for (String message : messages) storage.queue(playerId, message);
     }
 }

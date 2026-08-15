@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.0.3-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.3"></a>
+  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.0.4-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.4"></a>
   <a href="https://discord.gg/SZxPP9surw"><img src="https://img.shields.io/badge/Discord-Поддержка-5865F2?style=for-the-badge&labelColor=17241F" alt="Discord"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-17241F?style=for-the-badge" alt="MIT"></a>
 </p>
@@ -14,7 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Paper-1.16.5--1.21.x-5A8DEE?style=flat-square" alt="Paper 1.16.5–1.21.x">
   <img src="https://img.shields.io/badge/Java-17%2B-ED8B00?style=flat-square" alt="Java 17+">
-  <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB-429F91?style=flat-square" alt="SQLite, MySQL и MongoDB">
+  <img src="https://img.shields.io/badge/Storage-SQLite%20%7C%20MySQL%20%7C%20MongoDB%20%7C%20Redis-429F91?style=flat-square" alt="SQLite, MySQL, MongoDB и Redis">
   <img src="https://img.shields.io/badge/Economy-Vault%20%7C%20PlayerPoints%20%7C%20ExcellentEconomy-D66CFF?style=flat-square" alt="Поддерживаемые экономики">
 </p>
 
@@ -34,14 +34,14 @@
 | --- | --- |
 | Аукцион | Страницы, категории, сортировка, поиск, просмотр продавца и частичная покупка стака. |
 | Продажа | Обычные лоты, наборы предметов, автоматическая оценка `/ah sell auto` и перевыставление истёкших товаров. |
-| Уведомления | GUI-каталог всех предметов, уведомления о новых лотах и снижении цены, доставка сообщений после входа на сервер. |
+| Уведомления | GUI-каталог всех предметов и интерактивные сообщения о подходящих активных лотах, найденных в том числе во время отсутствия игрока. |
 | Зачарования | Один профиль может требовать несколько совместимых чар нужного уровня на одном предмете. |
 | Зелья | Обычные, усиленные, длительные, взрывные и туманные зелья, а также стрелы со всеми эффектами. |
 | Валюты | Независимая настройка `/ah` и `/dah` через Vault, PlayerPoints или ExcellentEconomy. |
 | Цены | Полный и сокращённый формат чисел: `K`, `M`, `B`, `T`, `Q`. |
 | Комиссии | Отдельный процент за выставление и продажу, включая скидки для групп привилегий. |
-| Интерфейс | Плавные анимации, русская локализация, настраиваемые материалы, текстуры, lore и расположение слотов. |
-| Хранилище | SQLite без отдельного сервера, MySQL и MongoDB. |
+| Интерфейс | Контекстные переходы GUI, локализация предметов RU/EN, настраиваемые Base64-текстуры, lore и расположение слотов. |
+| Хранилище | SQLite без отдельного сервера, MySQL, MongoDB и Redis через общий router pnLibrary. |
 
 ## Скриншоты
 
@@ -79,9 +79,43 @@
 - Откройте каталог командой `/ah notify` или кнопкой «Избранное и уведомления».
 - Нажмите ЛКМ по предмету, чтобы получать сообщения обо всех новых лотах этого типа.
 - Нажмите ПКМ, чтобы выбрать обязательные зачарования и минимальные уровни.
+- Один материал может иметь отдельный профиль без требований и несколько независимых профилей с разными комбинациями зачарований.
+- В редакторе чар настройте условия и нажмите по предмету в верхней части, чтобы сохранить новый профиль.
 - Все выбранные чары должны одновременно находиться на одном продаваемом предмете.
 - Несовместимые зачарования нельзя объединить в один профиль.
 - Активные профили можно просмотреть и удалить в отдельном меню.
+- После входа плагин показывает только ещё активные лоты, появившиеся во время отсутствия. Наведите на сообщение для просмотра количества и цены; нажмите, чтобы открыть конкретный лот.
+- `Shift+ЛКМ` по предмету включает автопокупку одной единицы не дороже цены, показанной в каталоге. Подтверждение не требуется; для набора приобретается весь набор.
+- Если текущей цены нет, плагин попросит ввести предел в чат. `Shift+ПКМ` позволяет задать собственную максимальную цену вручную.
+- Собственные лоты намеренно не участвуют в уведомлениях и автопокупке; проверять покупку нужно со второго игрока.
+- Автопокупка работает и для офлайн-игроков. Купленные предметы сохраняются в выбранной БД и не выбрасываются в мир.
+- При входе плагин автоматически переносит в инвентарь всё, что помещается. Остаток доступен через `/ah delivery` или `/dah delivery`.
+- Существующий `favorites.yml` при первом запуске новой версии переносится в выбранное хранилище и далее больше не используется.
+
+### Звуки
+
+```yml
+gui:
+  open: { type: BLOCK_CHEST_OPEN, volume: 0.2, pitch: 1.1 }
+  click: { type: UI_BUTTON_CLICK, volume: 0.2, pitch: 1.0 }
+
+action:
+  favorite-found: { type: ENTITY_EXPERIENCE_ORB_PICKUP, volume: 0.8, pitch: 1.0 }
+  purchase: { type: ENTITY_PLAYER_LEVELUP, volume: 0.2, pitch: 1.25 }
+```
+
+Все звуки интерфейса, действий, ошибок и Machine находятся в `sounds.yml`. `type` — имя значения `Sound` из Bukkit/Paper; `volume` и `pitch` принимают значения от `0` до `2`. Чтобы отключить отдельный звук, укажите `type: NONE`. Команда `/pnmarket reload` перечитывает файл.
+
+### Локализация предметов
+
+```yml
+localization:
+  locale: ru_ru # ru_ru или en_us
+```
+
+Названия материалов, блоков, зачарований и зелий предоставляет встроенная pnLibrary.
+Обе локали входят в JAR, отдельные файлы скачивать на сервер не требуется.
+Изменение применяется командой `/pnmarket reload`.
 
 ## Команды
 
@@ -93,13 +127,14 @@
 | `/ah sell auto` | Рассчитать цену по похожим активным лотам. |
 | `/ah kit <цена> [название]` | Создать лот-набор из предметов основного инвентаря. |
 | `/ah notify` | Открыть каталог уведомлений. |
+| `/ah delivery` | Открыть персональное хранилище доставок автопокупки. |
 | `/ah search [название]` | Найти товар; без названия используется предмет в руке. |
 | `/ah show <игрок>` | Посмотреть активные товары игрока. |
 | `/pnmarket` | Показать информацию о плагине и обновлении. |
 | `/pnmarket reload` | Перезагрузить конфигурацию. |
 | `/pnmarket machine` | Открыть редактор разметки GUI. |
 
-Для донат-аукциона команды `sell`, `sell auto`, `kit`, `notify`, `search` и `show` аналогично доступны через `/dah`.
+Для донат-аукциона команды `sell`, `sell auto`, `kit`, `notify`, `delivery`, `search` и `show` аналогично доступны через `/dah`.
 
 | Право | Назначение |
 | --- | --- |
@@ -118,12 +153,23 @@ currency:
     enabled: true
     type: vault # vault, playerpoints или excellent
     format: "&a{amount}⛃"
-    excellent-id: coins
   donate:
     enabled: true
     type: playerpoints
     format: "&d{amount} PP"
-    excellent-id: points
+```
+
+`excellent.id` нужен только при `type: excellent`: это ID валюты, созданной в
+ExcellentEconomy. Для Vault и PlayerPoints этот параметр не используется.
+
+```yml
+currency:
+  default:
+    enabled: true
+    type: excellent
+    format: "&a{amount} монет"
+    excellent:
+      id: coins
 ```
 
 ### Формат и ограничения цены
@@ -176,19 +222,50 @@ plugins/pnMarket/
 ├── config.yml
 ├── gui.yml
 ├── messages.yml
-├── favorites.yml
-├── pending-notifications.yml
-├── lang/ru_ru.json
+├── sounds.yml
 └── market.db
 ```
 
+### Хранилище
+
+```yml
+storage:
+  type: sqlite # sqlite, mysql, mongo или redis
+  sqlite:
+    file: market.db
+  mysql:
+    url: "" # при заполнении имеет приоритет над host/port/database
+    host: localhost
+    port: 3306
+    database: minecraft
+    username: root
+    password: ""
+    pool-size: 10
+  mongo:
+    uri: mongodb://localhost:27017
+    database: minecraft
+    collection: auction
+  redis:
+    uri: redis://localhost:6379/0
+    namespace: pnmarket
+```
+
+Все подсистемы pnMarket используют один публичный `DatabaseRouter` из pnLibrary.
+Смена `storage.type` требует полного перезапуска. Для Redis должна быть настроена
+персистентность на самом Redis-сервере, если он используется как основное хранилище.
+
 ## Установка
 
-1. Скачайте [`pnMarket-1.0.3.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest).
+1. Скачайте [`pnMarket-1.0.4.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest).
 2. Поместите JAR в папку `plugins/`.
 3. Установите выбранный плагин экономики и его зависимости: Vault, PlayerPoints или ExcellentEconomy.
-4. Запустите сервер и настройте `config.yml`, `gui.yml` и `messages.yml`.
+4. Запустите сервер и настройте `config.yml`, `gui.yml`, `messages.yml` и `sounds.yml`.
 5. Выполните полный перезапуск сервера. Не используйте PlugMan для первой установки или смены хранилища.
+
+Профиль, скорость и транспорт переходов управляются pnLibrary и не выводятся в
+конфигурацию pnMarket. `left_to_right` идёт из левого верхнего угла в правый
+нижний, `right_to_left` — обратно. Размер шага вычисляется динамически, чтобы
+меню любого размера раскрылось примерно за восемь кадров. Для GUI обязателен ProtocolLib.
 
 Требования: Paper 1.16.5–1.21.x и Java 17 или новее.
 
@@ -198,7 +275,7 @@ plugins/pnMarket/
 ./gradlew.bat --no-daemon shadowJar
 ```
 
-Готовый файл: `build/libs/pnMarket-1.0.3.jar`.
+Готовый файл: `build/libs/pnMarket-1.0.4.jar`.
 
 ## Поддержка
 

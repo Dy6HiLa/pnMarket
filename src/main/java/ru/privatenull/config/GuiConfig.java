@@ -11,6 +11,8 @@ import ru.privatenull.pnlibrary.item.HeadUtil;
 import ru.privatenull.pnlibrary.text.ColorUtil;
 
 import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public final class GuiConfig {
@@ -27,6 +29,19 @@ public final class GuiConfig {
     public void reload() {
         if (!file.exists()) plugin.saveResource("gui.yml", false);
         config = YamlConfiguration.loadConfiguration(file);
+        mergeMissingDefaults();
+    }
+
+    private void mergeMissingDefaults() {
+        var stream = plugin.getResource("gui.yml");
+        if (stream == null) return;
+        try (var reader = new InputStreamReader(stream, StandardCharsets.UTF_8)) {
+            config.setDefaults(YamlConfiguration.loadConfiguration(reader));
+            config.options().copyDefaults(true);
+            config.save(file);
+        } catch (Exception exception) {
+            plugin.getLogger().warning("Не удалось дополнить gui.yml новыми настройками: " + exception.getMessage());
+        }
     }
 
     public YamlConfiguration configuration() {

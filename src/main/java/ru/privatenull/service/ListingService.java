@@ -6,7 +6,6 @@ import org.bukkit.inventory.ItemStack;
 import ru.privatenull.PnMarketPlugin;
 import ru.privatenull.config.MessagesConfig;
 import ru.privatenull.currency.*;
-import ru.privatenull.localization.ItemLocalization;
 import ru.privatenull.market.*;
 import ru.privatenull.model.MarketListing;
 import ru.privatenull.storage.MarketStorage;
@@ -92,8 +91,8 @@ public final class ListingService {
             end(playerId, donate);
             sync.listingCreated(listing);
             runtime.favorites().notifyListing(listing, donate);
-            sendListed(player, donate, ItemLocalization.getPlainName(stored), totalPrice, commission);
-            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, .20f, 1.3f);
+            sendListed(player, donate, plugin.itemLocalization().getPlainName(stored), totalPrice, commission);
+            plugin.playSound(player, "action.listing-created");
         }, exception -> {
             end(playerId, donate);
             restore(player, List.of(stored));
@@ -174,7 +173,8 @@ public final class ListingService {
                 return;
             }
             if (blocked.contains(item.getType().name())) {
-                player.sendMessage("§cПредмет §e" + ItemLocalization.getPlainName(item) + " §cзапрещён внутри наборов.");
+                player.sendMessage("§cПредмет §e" + plugin.itemLocalization().getPlainName(item)
+                        + " §cзапрещён внутри наборов.");
                 return;
             }
             source.put(slot, item.clone());
@@ -265,7 +265,7 @@ public final class ListingService {
             sync.listingCreated(listing);
             runtime.favorites().notifyListing(listing, donate);
             sendListed(player, donate, name, totalPrice, commission);
-            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, .20f, 1.3f);
+            plugin.playSound(player, "action.listing-created");
             runtime.openAuction(player, donate);
         }, exception -> {
             end(playerId, donate);
@@ -308,10 +308,10 @@ public final class ListingService {
             String message = commission > 0
                     ? "notification.relisted-with-commission" : "notification.relisted";
             player.sendMessage(messages.message(message, Map.of(
-                    "item", ItemLocalization.getPlainName(listing.item()),
+                    "item", plugin.itemLocalization().getPlainName(listing.item()),
                     "price", plugin.formatPrice(donate, totalPrice, null),
                     "commission", plugin.formatPrice(donate, commission, null))));
-            player.playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, .20f, 1.3f);
+            plugin.playSound(player, "action.listing-created");
             plugin.renderAllViews();
         }, exception -> {
             end(player.getUniqueId(), donate);
@@ -396,7 +396,7 @@ public final class ListingService {
 
     private void listingLimit(Player player) {
         player.sendMessage(messages.message("error.listing-limit", Map.of("limit", policy.listingLimit(player))));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, .8f);
+        plugin.playSound(player, "error.default");
     }
 
     private void end(UUID playerId, boolean donate) {
@@ -439,7 +439,7 @@ public final class ListingService {
 
     private void reject(Player player, String key) {
         player.sendMessage(messages.message(key));
-        player.playSound(player.getLocation(), Sound.ENTITY_VILLAGER_NO, .20f, .8f);
+        plugin.playSound(player, "error.default");
     }
 
 }

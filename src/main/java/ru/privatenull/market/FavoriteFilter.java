@@ -5,13 +5,18 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public record FavoriteFilter(String id, Type type, String value, double maximumPrice,
-                             String enchantment, int enchantmentLevel) {
+                             String enchantment, int enchantmentLevel, boolean autoBuy) {
     public FavoriteFilter(String id, Type type, String value) {
-        this(id, type, value, 0, "", 0);
+        this(id, type, value, 0, "", 0, false);
     }
 
     public FavoriteFilter(String id, Type type, String value, double maximumPrice) {
-        this(id, type, value, maximumPrice, "", 0);
+        this(id, type, value, maximumPrice, "", 0, false);
+    }
+
+    public FavoriteFilter(String id, Type type, String value, double maximumPrice,
+                          String enchantment, int enchantmentLevel) {
+        this(id, type, value, maximumPrice, enchantment, enchantmentLevel, false);
     }
 
     public boolean hasEnchantment() {
@@ -42,7 +47,11 @@ public record FavoriteFilter(String id, Type type, String value, double maximumP
         String encoded = values.entrySet().stream().filter(entry -> entry.getValue() > 0)
                 .map(entry -> entry.getKey() + "=" + entry.getValue())
                 .collect(Collectors.joining(";"));
-        return new FavoriteFilter(id, type, value, maximumPrice, encoded, 0);
+        return new FavoriteFilter(id, type, value, maximumPrice, encoded, 0, autoBuy);
+    }
+
+    public FavoriteFilter withAutoBuy(boolean enabled) {
+        return new FavoriteFilter(id, type, value, maximumPrice, enchantment, enchantmentLevel, enabled);
     }
 
     public enum Type {

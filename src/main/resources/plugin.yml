@@ -5,6 +5,7 @@ api-version: '1.16'
 authors: [ privatenull ]
 description: pnMarket - AuctionPlugin
 website: https://github.com/Dy6HiLa/pnMarket
+depend: [ProtocolLib]
 softdepend: [Vault, PlayerPoints, ExcellentEconomy]
 libraries:
   - org.xerial:sqlite-jdbc:3.46.1.3
