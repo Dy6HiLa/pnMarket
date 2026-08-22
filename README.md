@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.0.4-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.4"></a>
+  <a href="https://github.com/Dy6HiLa/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.0.5-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.0.5"></a>
   <a href="https://discord.gg/SZxPP9surw"><img src="https://img.shields.io/badge/Discord-Поддержка-5865F2?style=for-the-badge&labelColor=17241F" alt="Discord"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-17241F?style=for-the-badge" alt="MIT"></a>
 </p>
@@ -256,7 +256,7 @@ storage:
 
 ## Установка
 
-1. Скачайте [`pnMarket-1.0.4.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest).
+1. Скачайте [`pnMarket-1.0.5.jar`](https://github.com/Dy6HiLa/pnMarket/releases/latest).
 2. Поместите JAR в папку `plugins/`.
 3. Установите выбранный плагин экономики и его зависимости: Vault, PlayerPoints или ExcellentEconomy.
 4. Запустите сервер и настройте `config.yml`, `gui.yml`, `messages.yml` и `sounds.yml`.
@@ -275,7 +275,7 @@ storage:
 ./gradlew.bat --no-daemon shadowJar
 ```
 
-Готовый файл: `build/libs/pnMarket-1.0.4.jar`.
+Готовый файл: `build/libs/pnMarket-1.0.5.jar`.
 
 ## Поддержка
 

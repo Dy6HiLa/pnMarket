@@ -343,7 +343,7 @@ public final class MarketMachineService implements Listener {
         Inventory inventory = Bukkit.createInventory(view, size, ColorUtil.colorize(title));
         view.inventory = inventory;
         renderer.accept(inventory);
-        animations.open(player, inventory, true, plugin.guiAnimationProfile(),
+        animations.open(player, inventory, false, plugin.guiAnimationProfile(),
                 plugin.guiTransitionOrigin(player));
         plugin.playSound(player, "machine.open");
     }

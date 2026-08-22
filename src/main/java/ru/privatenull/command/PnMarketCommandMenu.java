@@ -5,7 +5,7 @@ import org.bukkit.command.CommandSender;
 import ru.privatenull.PnMarketPlugin;
 import ru.privatenull.pnlibrary.compat.ServerVersion;
 import ru.privatenull.pnlibrary.text.ColorUtil;
-import ru.privatenull.pnlibrary.update.UpdateChecker;
+import ru.privatenull.pnlibrary.update.GitHubUpdater;
 
 final class PnMarketCommandMenu {
     private final PnMarketPlugin plugin;
@@ -34,7 +34,7 @@ final class PnMarketCommandMenu {
     }
 
     private String updateStatus(String currentVersion) {
-        UpdateChecker checker = plugin.getUpdateChecker();
+        GitHubUpdater checker = plugin.getUpdateChecker();
         if (checker == null || !checker.isCheckCompleted()) return "&7проверяется";
         if (checker.isUpdateAvailable()) {
             String latest = checker.getLatestVersion();

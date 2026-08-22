@@ -17,11 +17,11 @@ import ru.privatenull.notification.*;
 import ru.privatenull.pnlibrary.compat.*;
 import ru.privatenull.pnlibrary.localization.ItemLocalization;
 import ru.privatenull.pnlibrary.localization.MinecraftLocale;
-import ru.privatenull.pnlibrary.lifecycle.*;
+import ru.privatenull.pnlibrary.lifecycle.PluginRuntime;
 import ru.privatenull.pnlibrary.gui.GuiAnimationProfile;
 import ru.privatenull.pnlibrary.gui.GuiUpdateService;
 import ru.privatenull.pnlibrary.text.*;
-import ru.privatenull.pnlibrary.update.*;
+import ru.privatenull.pnlibrary.update.GitHubUpdater;
 import ru.privatenull.service.*;
 import ru.privatenull.util.*;
 
@@ -40,7 +40,7 @@ public final class PnMarketPlugin extends JavaPlugin {
     private DeliveryService deliveries;
     private AutoBuyPriceInputService autoBuyPriceInput;
     private final Map<UUID, Long> notificationOfflineSince = new HashMap<>();
-    private UpdateChecker updateChecker;
+    private GitHubUpdater updateChecker;
     private MarketMachineService machine;
     private GuiUpdateService guiUpdates;
     private MarketStorageFactory storageFactory;
@@ -76,7 +76,6 @@ public final class PnMarketPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(machine, this);
         startUpdateChecker();
         new Metrics(this, 32716);
-        PluginBanner.enabled(this);
     }
 
     @Override
@@ -88,7 +87,6 @@ public final class PnMarketPlugin extends JavaPlugin {
         if (storageFactory != null) storageFactory.close();
         if (guiUpdates != null) guiUpdates.close();
         if (updateChecker != null) updateChecker.cancel();
-        PluginBanner.disabled(this);
     }
 
     public void reloadRuntime() {
@@ -155,12 +153,12 @@ public final class PnMarketPlugin extends JavaPlugin {
         machine.open(player);
     }
 
-    public UpdateChecker getUpdateChecker() {
+    public GitHubUpdater getUpdateChecker() {
         return updateChecker;
     }
 
     public String getSupportDiscord() {
-        return PluginBanner.supportUrl();
+        return PluginRuntime.supportUrl();
     }
 
     public FavoriteService favorites() {
@@ -393,8 +391,7 @@ public final class PnMarketPlugin extends JavaPlugin {
     }
 
     private void startUpdateChecker() {
-        updateChecker = new UpdateChecker(this,
-                new UpdateSettings(true, "Dy6HiLa/pnMarket", "pnmarket.admin", 6, PluginBanner.supportUrl()));
+        updateChecker = new GitHubUpdater(this, "Dy6HiLa/pnMarket", "pnmarket.admin", PluginRuntime.supportUrl());
         updateChecker.start();
     }
 }

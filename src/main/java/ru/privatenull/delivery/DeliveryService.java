@@ -135,7 +135,7 @@ public final class DeliveryService implements Listener, AutoCloseable {
         view.inventory.setItem(52, page + 1 < pages
                 ? gui.item("delivery.navigation.next", Material.PLAYER_HEAD, Map.of("page", page + 2))
                 : gui.item("delivery.navigation.next-disabled", Material.PLAYER_HEAD, Map.of()));
-        animations.open(player, view.inventory, true, plugin.guiAnimationProfile(), sourceSlot);
+        animations.open(player, view.inventory, false, plugin.guiAnimationProfile(), sourceSlot);
         plugin.playSound(player, open ? "gui.open" : "gui.click");
     }
 

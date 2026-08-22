@@ -166,13 +166,13 @@ public final class MarketGuiController {
 
     private void openGui(Player player, Inventory inventory) {
         guiAnimations.cancel(player);
-        guiAnimations.open(player, inventory, true, plugin.guiAnimationProfile(),
+        guiAnimations.open(player, inventory, false, plugin.guiAnimationProfile(),
                 plugin.guiTransitionOrigin(player));
     }
 
     private void animateRedraw(Player player, Inventory inventory) {
         guiAnimations.cancel(player);
-        guiAnimations.open(player, inventory, true, plugin.guiAnimationProfile(),
+        guiAnimations.open(player, inventory, false, plugin.guiAnimationProfile(),
                 plugin.guiTransitionOrigin(player));
     }
 
