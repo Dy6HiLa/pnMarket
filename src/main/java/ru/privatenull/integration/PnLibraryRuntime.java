@@ -85,6 +85,7 @@ public final class PnLibraryRuntime implements PnRuntime {
             throw failure;
         }
         Log.attach(owner, module);
+        ru.privatenull.support.text.ColorUtil.use(module.getComponents());
     }
 
     @Override

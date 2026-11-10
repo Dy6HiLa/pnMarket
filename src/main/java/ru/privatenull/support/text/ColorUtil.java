@@ -6,6 +6,8 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.pnfolder.pnlibrary.api.text.ComponentSerializerType;
+import org.pnfolder.pnlibrary.api.text.ComponentService;
 
 import java.util.Map;
 
@@ -31,30 +33,23 @@ public final class ColorUtil {
     private ColorUtil() {
     }
 
-    public static Component component(String value) {
-        String converted = toMiniMessage(value == null ? "" : value);
-        MiniMessage mini = Mini.VALUE;
-        return mini != null ? mini.deserialize(converted) : SimpleMiniMessage.parse(converted);
+    private static volatile ComponentService library;
+
+    /** Hands text parsing to pnLibrary, which also copes with servers whose own Adventure is too old for MiniMessage. */
+    public static void use(ComponentService components) {
+        library = components;
     }
 
-    /**
-     * MiniMessage needs a newer Adventure than old servers bring (Paper 1.16.5: no Component.compact()). It is
-     * checked once, and on such a server the plugin falls back to {@link SimpleMiniMessage} instead of failing to start.
-     */
-    private static final class Mini {
-        static final MiniMessage VALUE = create();
+    public static Component component(String value) {
+        String converted = toMiniMessage(value == null ? "" : value);
+        ComponentService components = library;
+        if (components != null) return components.deserialize(converted, ComponentSerializerType.MINI_MESSAGE);
+        return Standalone.MINI_MESSAGE.deserialize(converted);
+    }
 
-        private static MiniMessage create() {
-            try {
-                MiniMessage mini = MiniMessage.miniMessage();
-                mini.deserialize("<red>x</red>");
-                return mini;
-            } catch (LinkageError incompatible) {
-                java.util.logging.Logger.getLogger("pnMarket")
-                        .warning("Adventure сервера слишком старый для MiniMessage, включён упрощённый разбор: " + incompatible);
-                return null;
-            }
-        }
+    /** Used only before the plugin is registered in pnLibrary (for example in unit tests). */
+    private static final class Standalone {
+        static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     }
 
     private static String toMiniMessage(String input) {
