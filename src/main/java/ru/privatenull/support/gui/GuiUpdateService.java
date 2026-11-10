@@ -148,6 +148,6 @@ public final class GuiUpdateService implements AutoCloseable {
         boolean currentEmpty = current == null || current.getType().isAir();
         boolean replacementEmpty = replacement == null || replacement.getType().isAir();
         if (currentEmpty || replacementEmpty) return currentEmpty == replacementEmpty;
-        return current.equals(replacement);
+        return ru.privatenull.support.item.SimilarItems.isEqual(current, replacement);
     }
 }

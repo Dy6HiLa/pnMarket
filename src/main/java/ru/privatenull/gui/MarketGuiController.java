@@ -1,6 +1,7 @@
 package ru.privatenull.gui;
 
 import ru.privatenull.integration.Log;
+import ru.privatenull.support.item.SimilarItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
@@ -221,7 +222,7 @@ public final class MarketGuiController {
         boolean currentEmpty = current == null || current.getType().isAir();
         boolean replacementEmpty = replacement == null || replacement.getType().isAir();
         if (currentEmpty || replacementEmpty) return currentEmpty == replacementEmpty;
-        return current.equals(replacement);
+        return SimilarItems.isEqual(current, replacement);
     }
 
     private MarketSync sync() {
@@ -337,7 +338,7 @@ public final class MarketGuiController {
 
         List<Double> prices = activeListings().stream()
                 .filter(candidate -> !isBundle(candidate))
-                .filter(candidate -> candidate.item().isSimilar(listing.item()))
+                .filter(candidate -> SimilarItems.isSimilar(candidate.item(), listing.item()))
                 .map(MarketListing::pricePerUnit)
                 .filter(price -> Double.isFinite(price) && price > 0)
                 .toList();
@@ -393,7 +394,7 @@ public final class MarketGuiController {
             if (source == null || source.getType().isAir()) continue;
             int remaining = source.getAmount();
             for (ItemStack stored : simulated) {
-                if (stored == null || !stored.isSimilar(source)) continue;
+                if (stored == null || !SimilarItems.isSimilar(stored, source)) continue;
                 int space = stored.getMaxStackSize() - stored.getAmount();
                 if (space <= 0) continue;
                 int added = Math.min(space, remaining);
