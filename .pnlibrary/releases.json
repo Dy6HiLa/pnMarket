@@ -3,6 +3,29 @@
   "product": "pnmarket",
   "releases": [
     {
+      "version": "1.2.2",
+      "channel": "stable",
+      "description": "Исправления окон аукциона на Paper 1.16.5, меньший размер плагина (драйверы баз скачиваются сервером), новая ссылка поддержки.",
+      "changelogUrl": "https://github.com/PnFolder/pnMarket/blob/main/.pnlibrary/changelogs/1.2.2.md",
+      "publishedAt": "2026-11-10T21:07:09Z",
+      "api": {
+        "minimum": 1,
+        "maximum": 1
+      },
+      "artifacts": [
+        {
+          "file": "pnMarket-1.2.2-paper-mc1.16.5-java17.jar",
+          "platform": "BUKKIT",
+          "java": {
+            "minimum": 17
+          },
+          "url": "https://github.com/PnFolder/pnMarket/releases/download/v1.2.2/pnMarket-1.2.2-paper-mc1.16.5-java17.jar",
+          "sha256": "346733b6e36b1a864ac18778119e4a309c4c9d022af6ce61488d82f58bdf3ba0",
+          "size": 2645215
+        }
+      ]
+    },
+    {
       "version": "1.2.1",
       "channel": "stable",
       "description": "Подключение к pnLibrary 0.0.1-dev.6: обновления, диагностика, метрики и единый журнал.",
