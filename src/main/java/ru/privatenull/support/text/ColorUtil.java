@@ -17,7 +17,6 @@ public final class ColorUtil {
             .hexColors()
             .useUnusualXRepeatedCharacterHexFormat()
             .build();
-    private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     private static final Map<Character, TextColor> COLORS = Map.ofEntries(
             Map.entry('0', NamedTextColor.BLACK), Map.entry('1', NamedTextColor.DARK_BLUE),
             Map.entry('2', NamedTextColor.DARK_GREEN), Map.entry('3', NamedTextColor.DARK_AQUA),
@@ -33,7 +32,29 @@ public final class ColorUtil {
     }
 
     public static Component component(String value) {
-        return MINI_MESSAGE.deserialize(toMiniMessage(value == null ? "" : value));
+        String converted = toMiniMessage(value == null ? "" : value);
+        MiniMessage mini = Mini.VALUE;
+        return mini != null ? mini.deserialize(converted) : SimpleMiniMessage.parse(converted);
+    }
+
+    /**
+     * MiniMessage needs a newer Adventure than old servers bring (Paper 1.16.5: no Component.compact()). It is
+     * checked once, and on such a server the plugin falls back to {@link SimpleMiniMessage} instead of failing to start.
+     */
+    private static final class Mini {
+        static final MiniMessage VALUE = create();
+
+        private static MiniMessage create() {
+            try {
+                MiniMessage mini = MiniMessage.miniMessage();
+                mini.deserialize("<red>x</red>");
+                return mini;
+            } catch (LinkageError incompatible) {
+                java.util.logging.Logger.getLogger("pnMarket")
+                        .warning("Adventure сервера слишком старый для MiniMessage, включён упрощённый разбор: " + incompatible);
+                return null;
+            }
+        }
     }
 
     private static String toMiniMessage(String input) {
