@@ -41,7 +41,7 @@ jobs:
       - name: Read version
         id: version
         run: |
-          VERSION=$(sed -n "s/^version = ['\"]\([^'\"]*\)['\"].*//p" build.gradle | head -n 1)
+          VERSION=$(sed -n "s/^version = ['\"]\([^'\"]*\)['\"].*/\1/p" build.gradle | head -n 1)
           test -n "$VERSION"
           echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
