@@ -333,7 +333,7 @@ public final class MarketMachineService implements Listener {
                     ColorUtil.colorize(title));
             renderer.accept(rendered);
             for (int slot = 0; slot < size; slot++) {
-                if (!Objects.equals(current.getItem(slot), rendered.getItem(slot))) {
+                if (!ru.privatenull.support.item.SimilarItems.isEqual(current.getItem(slot), rendered.getItem(slot))) {
                     updates.setTopSlot(player, current, slot, rendered.getItem(slot));
                 }
             }

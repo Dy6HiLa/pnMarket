@@ -1,6 +1,7 @@
 package ru.privatenull.delivery;
 
 import ru.privatenull.integration.Log;
+import ru.privatenull.support.item.SimilarItems;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
@@ -203,7 +204,7 @@ public final class DeliveryService implements Listener, AutoCloseable {
     private static boolean fit(ItemStack[] contents, ItemStack source) {
         int remaining = source.getAmount();
         for (ItemStack stored : contents) {
-            if (stored == null || !stored.isSimilar(source)) continue;
+            if (stored == null || !SimilarItems.isSimilar(stored, source)) continue;
             int added = Math.min(stored.getMaxStackSize() - stored.getAmount(), remaining);
             stored.setAmount(stored.getAmount() + added);
             remaining -= added;

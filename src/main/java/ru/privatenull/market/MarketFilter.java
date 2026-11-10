@@ -49,26 +49,25 @@ public final class MarketFilter {
     }
 
     public static void sortListings(List<MarketListing> list, SortType sort) {
+        // The id breaks ties: without it equal prices or times swap places after every refresh.
+        list.sort(comparator(sort).thenComparing(MarketListing::id));
+    }
+
+    private static Comparator<MarketListing> comparator(SortType sort) {
         switch (sort) {
             case OLD_FIRST:
-                list.sort(Comparator.comparingLong(MarketListing::createdAt));
-                break;
+                return Comparator.comparingLong(MarketListing::createdAt);
             case PRICE_TOTAL_DESC:
-                list.sort((a, b) -> Double.compare(b.pricePerUnit() * b.amount(), a.pricePerUnit() * a.amount()));
-                break;
+                return (a, b) -> Double.compare(b.pricePerUnit() * b.amount(), a.pricePerUnit() * a.amount());
             case PRICE_TOTAL_ASC:
-                list.sort(Comparator.comparingDouble(l -> l.pricePerUnit() * l.amount()));
-                break;
+                return Comparator.comparingDouble(l -> l.pricePerUnit() * l.amount());
             case PRICE_UNIT_DESC:
-                list.sort((a, b) -> Double.compare(b.pricePerUnit(), a.pricePerUnit()));
-                break;
+                return (a, b) -> Double.compare(b.pricePerUnit(), a.pricePerUnit());
             case PRICE_UNIT_ASC:
-                list.sort(Comparator.comparingDouble(MarketListing::pricePerUnit));
-                break;
+                return Comparator.comparingDouble(MarketListing::pricePerUnit);
             case NEW_FIRST:
             default:
-                list.sort((a, b) -> Long.compare(b.createdAt(), a.createdAt()));
-                break;
+                return (a, b) -> Long.compare(b.createdAt(), a.createdAt());
         }
     }
 }

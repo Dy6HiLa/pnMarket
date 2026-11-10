@@ -1,6 +1,7 @@
 package ru.privatenull.service;
 
 import ru.privatenull.integration.Log;
+import ru.privatenull.support.item.SimilarItems;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -114,7 +115,7 @@ public final class ListingService {
             return;
         }
         List<Double> samples = runtime.activeListings(donate).stream()
-                .filter(listing -> listing.item() != null && listing.item().isSimilar(hand))
+                .filter(listing -> listing.item() != null && SimilarItems.isSimilar(listing.item(), hand))
                 .map(MarketListing::pricePerUnit).filter(value -> Double.isFinite(value) && value > 0)
                 .sorted().toList();
         int required = Math.max(1, configInt("sell.auto.minimum-samples", "listings.auto.minimum-samples", 1));

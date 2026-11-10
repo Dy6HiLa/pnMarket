@@ -1,6 +1,7 @@
 package ru.privatenull.gui;
 
 import ru.privatenull.integration.Log;
+import ru.privatenull.support.item.SimilarItems;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
@@ -54,10 +55,10 @@ public final class MarketGuiController {
     };
 
     private static final int[] PURCHASE_BLACK_SLOTS = {
-            0, 2, 3, 4, 5, 6, 8, 10, 16, 17, 18, 26, 27, 35, 37, 43, 45, 47, 48, 49, 50, 51, 53
+            0, 2, 3, 4, 5, 6, 8, 10, 16, 18, 26, 27, 35, 37, 43, 45, 47, 48, 49, 50, 51, 53
     };
     private static final int[] PURCHASE_ORANGE_SLOTS = {
-            1, 7, 9, 11, 12, 13, 14, 15, 19, 25, 28, 34, 36, 38, 39, 40, 41, 42, 44, 46, 52
+            1, 7, 9, 11, 12, 13, 14, 15, 17, 19, 25, 28, 34, 36, 38, 39, 40, 41, 42, 44, 46, 52
     };
     private static final int[] AUCTION_BLACK_SLOTS = {
             0, 2, 3, 4, 5, 6, 8,
@@ -221,7 +222,7 @@ public final class MarketGuiController {
         boolean currentEmpty = current == null || current.getType().isAir();
         boolean replacementEmpty = replacement == null || replacement.getType().isAir();
         if (currentEmpty || replacementEmpty) return currentEmpty == replacementEmpty;
-        return current.equals(replacement);
+        return SimilarItems.isEqual(current, replacement);
     }
 
     private MarketSync sync() {
@@ -337,7 +338,7 @@ public final class MarketGuiController {
 
         List<Double> prices = activeListings().stream()
                 .filter(candidate -> !isBundle(candidate))
-                .filter(candidate -> candidate.item().isSimilar(listing.item()))
+                .filter(candidate -> SimilarItems.isSimilar(candidate.item(), listing.item()))
                 .map(MarketListing::pricePerUnit)
                 .filter(price -> Double.isFinite(price) && price > 0)
                 .toList();
@@ -393,7 +394,7 @@ public final class MarketGuiController {
             if (source == null || source.getType().isAir()) continue;
             int remaining = source.getAmount();
             for (ItemStack stored : simulated) {
-                if (stored == null || !stored.isSimilar(source)) continue;
+                if (stored == null || !SimilarItems.isSimilar(stored, source)) continue;
                 int space = stored.getMaxStackSize() - stored.getAmount();
                 if (space <= 0) continue;
                 int added = Math.min(space, remaining);
@@ -556,20 +557,12 @@ public final class MarketGuiController {
             black.setItemMeta(bm);
         }
         hideAttributes(black);
-        setSlot(inv, layout.previous(), gui.item("pagination.previous-disabled", Material.PLAYER_HEAD, Map.of()));
-        setSlot(inv, layout.next(), gui.item("pagination.next-disabled", Material.PLAYER_HEAD, Map.of()));
-
-        if (view.page > 0) {
-            ItemStack prev = gui.item("pagination.previous", Material.PLAYER_HEAD,
-                    Map.of("page", view.page));
-            setSlot(inv, layout.previous(), prev);
-        }
-
-        if (view.page < totalPages - 1) {
-            ItemStack next = gui.item("pagination.next", Material.PLAYER_HEAD,
-                    Map.of("page", view.page + 2));
-            setSlot(inv, layout.next(), next);
-        }
+        setSlot(inv, layout.previous(), view.page > 0
+                ? gui.item("pagination.previous", Material.PLAYER_HEAD, Map.of("page", view.page))
+                : gui.item("pagination.previous-disabled", Material.PLAYER_HEAD, Map.of()));
+        setSlot(inv, layout.next(), view.page < totalPages - 1
+                ? gui.item("pagination.next", Material.PLAYER_HEAD, Map.of("page", view.page + 2))
+                : gui.item("pagination.next-disabled", Material.PLAYER_HEAD, Map.of()));
 
         if (!view.isSearch) {
             updateCategoryIcon(view, categoryCounts(), activeListings().size());
@@ -695,16 +688,6 @@ public final class MarketGuiController {
         }
         hideAttributes(item);
         int sortSlot = layout.sort();
-        if (view.isSearch) {
-            ItemStack black = new ItemStack(Material.BLACK_STAINED_GLASS_PANE);
-            ItemMeta blackMeta = black.getItemMeta();
-            if (blackMeta != null) {
-                blackMeta.setDisplayName(" ");
-                black.setItemMeta(blackMeta);
-            }
-            hideAttributes(black);
-            setSlot(inv, 52, black);
-        }
         setSlot(inv, sortSlot, item);
     }
 

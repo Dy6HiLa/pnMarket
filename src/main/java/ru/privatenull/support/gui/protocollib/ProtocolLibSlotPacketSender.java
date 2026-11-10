@@ -111,10 +111,17 @@ public final class ProtocolLibSlotPacketSender
 
     private void sendSlot(Player player, ContainerState state, int slot, ItemStack item) {
         PacketContainer packet = protocol.createPacket(PacketType.Play.Server.SET_SLOT);
-        packet.getIntegers()
-                .writeSafely(0, state.containerId())
-                .writeSafely(1, state.stateId())
-                .writeSafely(2, slot);
+        if (hasStateId(PacketType.Play.Server.SET_SLOT, packet.getIntegers().size())) {
+            packet.getIntegers()
+                    .writeSafely(0, state.containerId())
+                    .writeSafely(1, state.stateId())
+                    .writeSafely(2, slot);
+        } else {
+            // Before 1.17.1 the packet is (window, slot); writing a state id there would overwrite the slot.
+            packet.getIntegers()
+                    .writeSafely(0, state.containerId())
+                    .writeSafely(1, slot);
+        }
         packet.getItemModifier().writeSafely(0,
                 item == null ? new ItemStack(Material.AIR) : item.clone());
         protocol.sendServerPacket(player, packet, false);
@@ -141,6 +148,7 @@ public final class ProtocolLibSlotPacketSender
             return;
         }
 
+        if (!hasStateId(type, event.getPacket().getIntegers().size())) return;
         Integer stateId = event.getPacket().getIntegers().readSafely(1);
         if (stateId == null) return;
         states.compute(playerId, (ignored, current) -> {
@@ -151,6 +159,11 @@ public final class ProtocolLibSlotPacketSender
                     ? new ContainerState(containerId, stateId, current.openPacket())
                     : current;
         });
+    }
+
+    /** Only 1.17.1+ packets carry a state id: SET_SLOT is (window, state, slot), WINDOW_ITEMS is (window, state). */
+    static boolean hasStateId(PacketType type, int integerCount) {
+        return type == PacketType.Play.Server.SET_SLOT ? integerCount >= 3 : integerCount >= 2;
     }
 
     private record ContainerState(int containerId, int stateId, PacketContainer openPacket) {
