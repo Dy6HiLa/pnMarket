@@ -6,6 +6,8 @@ import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
+import org.pnfolder.pnlibrary.api.text.ComponentSerializerType;
+import org.pnfolder.pnlibrary.api.text.ComponentService;
 
 import java.util.Map;
 
@@ -17,7 +19,6 @@ public final class ColorUtil {
             .hexColors()
             .useUnusualXRepeatedCharacterHexFormat()
             .build();
-    private static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     private static final Map<Character, TextColor> COLORS = Map.ofEntries(
             Map.entry('0', NamedTextColor.BLACK), Map.entry('1', NamedTextColor.DARK_BLUE),
             Map.entry('2', NamedTextColor.DARK_GREEN), Map.entry('3', NamedTextColor.DARK_AQUA),
@@ -32,8 +33,23 @@ public final class ColorUtil {
     private ColorUtil() {
     }
 
+    private static volatile ComponentService library;
+
+    /** Hands text parsing to pnLibrary, which also copes with servers whose own Adventure is too old for MiniMessage. */
+    public static void use(ComponentService components) {
+        library = components;
+    }
+
     public static Component component(String value) {
-        return MINI_MESSAGE.deserialize(toMiniMessage(value == null ? "" : value));
+        String converted = toMiniMessage(value == null ? "" : value);
+        ComponentService components = library;
+        if (components != null) return components.deserialize(converted, ComponentSerializerType.MINI_MESSAGE);
+        return Standalone.MINI_MESSAGE.deserialize(converted);
+    }
+
+    /** Used only before the plugin is registered in pnLibrary (for example in unit tests). */
+    private static final class Standalone {
+        static final MiniMessage MINI_MESSAGE = MiniMessage.miniMessage();
     }
 
     private static String toMiniMessage(String input) {
