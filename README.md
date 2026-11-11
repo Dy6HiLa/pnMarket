@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/pnFolder/pnMarket/releases/latest"><img src="https://img.shields.io/badge/Скачать-v1.2.0-68FB3C?style=for-the-badge&labelColor=17241F" alt="Скачать pnMarket 1.2.0"></a>
-  <a href="https://discord.gg/wYgprUUMhm"><img src="https://img.shields.io/badge/Discord-Поддержка-5865F2?style=for-the-badge&labelColor=17241F" alt="Discord"></a>
+  <a href="https://discord.gg/rSxZAVW7uC"><img src="https://img.shields.io/badge/Discord-Поддержка-5865F2?style=for-the-badge&labelColor=17241F" alt="Discord"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-17241F?style=for-the-badge" alt="MIT"></a>
 </p>
 
@@ -294,7 +294,7 @@ git -C ../pnLibrary checkout 6053231cffd72fec870b72d6410b18f141741f51
 
 ## Поддержка
 
-- [Discord](https://discord.gg/wYgprUUMhm)
+- [Discord](https://discord.gg/rSxZAVW7uC)
 - [GitHub Issues](https://github.com/Dy6HiLa/pnMarket/issues)
 
 ## Лицензия
