@@ -32,7 +32,7 @@ import java.util.*;
 import java.util.logging.Level;
 
 public final class PnMarketPlugin extends JavaPlugin {
-    private static final String SUPPORT_DISCORD = "https://discord.gg/wYgprUUMhm";
+    private static final String SUPPORT_DISCORD = "https://discord.gg/rSxZAVW7uC";
 
     private MessagesConfig messages;
     private GuiConfig guiConfig;
